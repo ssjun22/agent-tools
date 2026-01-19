@@ -1,9 +1,9 @@
 ---
-name: e2e-testing-patterns
+name: e2e-test-helper
 description: Implement reliable E2E tests with Playwright or Cypress. Use when writing end-to-end tests, debugging flaky tests, setting up test automation, or testing critical user flows. Triggers on E2E, Playwright, Cypress, test automation, user journey testing, or flaky test debugging.
 ---
 
-# E2E Testing Patterns
+# E2E Test Helper
 
 Build reliable, fast, and maintainable end-to-end test suites that provide confidence to ship code quickly and catch regressions before users do.
 
