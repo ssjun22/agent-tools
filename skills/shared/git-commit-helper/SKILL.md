@@ -1,5 +1,5 @@
 ---
-name: Git Commit Helper
+name: git-commit-helper
 description: git diff를 분석하여 'type: 한글 설명' 형식의 커밋 메시지를 생성합니다. 커밋 메시지 작성이나 staged 변경사항 검토 시 사용하세요.
 hooks:
   PostToolUse:
