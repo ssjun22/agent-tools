@@ -1,6 +1,7 @@
 ---
 name: ob:daily-log
 description: This skill should be used when users want to automatically generate a professional daily work log by analyzing today's git commits and code changes. It creates a structured markdown note in an Obsidian vault, summarizing key accomplishments, code changes, issues, and plans. Trigger phrases include "create today's log", "generate daily note", "make work log", or when users mention daily logging or Obsidian daily notes.
+disable-model-invocation: true
 ---
 
 # Obsidian Daily Log Generator
@@ -25,11 +26,15 @@ This skill uses a single configuration file located at `skills/shared/ob-daily-l
 Before first use, edit the `.env` file to set:
 1. **OBSIDIAN_VAULT_PATH**: Absolute path to your Obsidian vault (required)
 2. **BASE_DIR**: Base directory within vault for organizing daily logs (default: `ob-glens`)
-3. **Project mappings**: Optional mappings from project paths to Obsidian folder names (optional)
+3. **USE_PROJECT_ROOT**: Whether to organize logs by project (default: `false`)
+4. **FILTER_AUTHOR**: Filter commits by author - `me` (default) or `all`
+5. **Project mappings**: Optional mappings from project paths to Obsidian folder names (only if USE_PROJECT_ROOT=true)
 
-The daily notes will be saved to `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/{PROJECT_ROOT}/Daily/YYYY-MM-DD.md`.
+The daily notes will be saved to:
+- If `USE_PROJECT_ROOT=false`: `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/Daily/YYYY-MM-DD.md`
+- If `USE_PROJECT_ROOT=true`: `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/{PROJECT_ROOT}/Daily/YYYY-MM-DD.md`
 
-Default structure: `ObsidianVault/ob-glens/{PROJECT_ROOT}/Daily/YYYY-MM-DD.md`
+Default structure: `ObsidianVault/ob-glens/Daily/YYYY-MM-DD.md`
 
 ### Configuration File Structure
 
@@ -46,7 +51,23 @@ OBSIDIAN_VAULT_PATH=/Users/yourusername/Documents/ObsidianVault
 BASE_DIR=ob-glens
 ```
 
-**Optional project mappings** (format: `/absolute/project/path=folder-name`):
+**Optional project root organization** (default: `false`):
+```bash
+# Set to true to organize logs by project folder
+# false: All logs in {BASE_DIR}/Daily/
+# true: Logs in {BASE_DIR}/{PROJECT_ROOT}/Daily/
+USE_PROJECT_ROOT=false
+```
+
+**Optional git author filter** (default: `me`):
+```bash
+# Filter commits by author
+# "me": Only include commits by current git user (default)
+# "all": Include all commits from all authors
+FILTER_AUTHOR=me
+```
+
+**Optional project mappings** (only if USE_PROJECT_ROOT=true, format: `/absolute/project/path=folder-name`):
 ```bash
 # If not mapped, the skill will auto-detect the folder name from:
 #   1. Git repository name
@@ -72,7 +93,17 @@ The Obsidian folder name (`PROJECT_ROOT`) is determined in this order:
 - Working in a monorepo subdirectory
 - Want a different Obsidian folder name than the project/repo name
 
-**Example structure**:
+**Example structure (USE_PROJECT_ROOT=false)**:
+```
+ObsidianVault/
+└── ob-glens/
+    └── Daily/
+        ├── 2026-01-20.md
+        ├── 2026-01-21.md
+        └── 2026-01-22.md
+```
+
+**Example structure (USE_PROJECT_ROOT=true)**:
 ```
 ObsidianVault/
 └── ob-glens/
@@ -113,11 +144,27 @@ BASE_DIR=$(grep "^BASE_DIR=" "$CONFIG_FILE" | cut -d'=' -f2)
 if [ -z "$BASE_DIR" ]; then
     BASE_DIR="ob-glens"
 fi
+
+# Extract USE_PROJECT_ROOT (default: false)
+USE_PROJECT_ROOT=$(grep "^USE_PROJECT_ROOT=" "$CONFIG_FILE" | cut -d'=' -f2)
+if [ -z "$USE_PROJECT_ROOT" ]; then
+    USE_PROJECT_ROOT="false"
+fi
+
+# Extract FILTER_AUTHOR (default: me)
+FILTER_AUTHOR=$(grep "^FILTER_AUTHOR=" "$CONFIG_FILE" | cut -d'=' -f2)
+if [ -z "$FILTER_AUTHOR" ]; then
+    FILTER_AUTHOR="me"
+fi
 ```
 
 If `OBSIDIAN_VAULT_PATH` is not set, ask the user to configure it and offer to update the .env file.
 
-**Step 2b: Determine PROJECT_ROOT**
+**Step 2b: Determine PROJECT_ROOT (only if USE_PROJECT_ROOT=true)**
+
+If USE_PROJECT_ROOT is false, skip this step and use `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/Daily/` as the target directory.
+
+If USE_PROJECT_ROOT is true:
 
 Get the current project's absolute path:
 ```bash
@@ -149,20 +196,65 @@ If all methods fail, ask the user to provide the Obsidian folder name.
 
 ### 3. Analyze Git History
 
-Analyze commits from today (00:00 to current time):
+**Step 3a: Determine author filter**
 
+If `FILTER_AUTHOR=me` (default), get current git user information:
 ```bash
-# Get today's commits with author and message
-git log --since="today 00:00" --pretty=format:"%h - %an, %ar : %s"
-
-# Get detailed diff of today's changes
-git diff --stat $(git log --since="today 00:00" --pretty=format:"%h" | tail -1)^..HEAD
-
-# Get full diff for analysis
-git diff $(git log --since="today 00:00" --pretty=format:"%h" | tail -1)^..HEAD
+GIT_USER_NAME=$(git config user.name)
+GIT_USER_EMAIL=$(git config user.email)
 ```
 
-If there are no commits today, inform the user and ask if they want to analyze recent commits instead.
+Construct author filter argument:
+```bash
+if [ "$FILTER_AUTHOR" = "me" ]; then
+    # Filter by current user's email (more reliable than name)
+    AUTHOR_FILTER="--author=$GIT_USER_EMAIL"
+else
+    # No filter, include all authors
+    AUTHOR_FILTER=""
+fi
+```
+
+**Step 3b: Analyze commits from today (00:00 to current time)**
+
+Get current date in YYYY-MM-DD format:
+```bash
+TODAY=$(date +%Y-%m-%d)
+```
+
+Get today's commits:
+```bash
+# Get today's commits with author and message
+git log --since="${TODAY} 00:00" --until="${TODAY} 23:59" $AUTHOR_FILTER --pretty=format:"%h - %an, %ar : %s"
+
+# Get commit hashes for diff analysis
+COMMITS=$(git log --since="${TODAY} 00:00" --until="${TODAY} 23:59" $AUTHOR_FILTER --pretty=format:"%H")
+```
+
+**For FILTER_AUTHOR=me (default)**: Analyze each commit individually to avoid including other authors' changes
+
+```bash
+# Show changes from each commit by the filtered author
+for commit in $COMMITS; do
+    git show --stat $commit
+done
+```
+
+This ensures only the filtered author's changes are included in the analysis.
+
+**For FILTER_AUTHOR=all**: Use range-based diff
+
+```bash
+FIRST_COMMIT=$(git log --since="${TODAY} 00:00" --until="${TODAY} 23:59" --pretty=format:"%h" | tail -1)
+LAST_COMMIT=$(git log --since="${TODAY} 00:00" --until="${TODAY} 23:59" --pretty=format:"%h" | head -1)
+
+if [ -n "$FIRST_COMMIT" ]; then
+    git diff --stat ${FIRST_COMMIT}^..${LAST_COMMIT}
+    git diff ${FIRST_COMMIT}^..${LAST_COMMIT}
+fi
+```
+
+If there are no commits today by the filtered author, inform the user and ask if they want to analyze recent commits instead.
 
 ### 4. Infer Business Logic and Key Accomplishments
 
@@ -209,8 +301,12 @@ Use the template from `assets/daily-note-template.md` to create the daily note:
    - `{{코드 내 TODO 주석이나 미해결 사항 추출}}`: Extracted TODOs and blockers
    - `{{오늘 마무리하지 못한 작업을 기반으로 추천}}`: Suggested next steps
 
-3. Create project directory if needed: `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/{PROJECT_ROOT}/Daily/`
-4. Save to `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/{PROJECT_ROOT}/Daily/{YYYY-MM-DD}.md`
+3. Create daily directory if needed:
+   - If `USE_PROJECT_ROOT=false`: `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/Daily/`
+   - If `USE_PROJECT_ROOT=true`: `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/{PROJECT_ROOT}/Daily/`
+4. Save to:
+   - If `USE_PROJECT_ROOT=false`: `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/Daily/{YYYY-MM-DD}.md`
+   - If `USE_PROJECT_ROOT=true`: `{OBSIDIAN_VAULT_PATH}/{BASE_DIR}/{PROJECT_ROOT}/Daily/{YYYY-MM-DD}.md`
 
 ### 8. Confirm Completion
 

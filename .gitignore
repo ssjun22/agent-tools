@@ -2,3 +2,5 @@
 .gemini
 skills/reference
 .agent
+.env
+**/.env
