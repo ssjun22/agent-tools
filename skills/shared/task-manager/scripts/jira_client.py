@@ -247,7 +247,9 @@ class JiraClient:
         priority: Optional[str] = None,
         assignee: Optional[str] = None,
         duedate: Optional[str] = None,
-        reporter: Optional[str] = None
+        reporter: Optional[str] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None
     ) -> bool:
         """
         Update Jira issue fields
@@ -258,6 +260,8 @@ class JiraClient:
             priority: New priority (높음/중간/낮음)
             assignee: New assignee name
             duedate: New due date (YYYY-MM-DD)
+            summary: New issue summary
+            description: New issue description (markdown)
 
         Returns:
             True on success, False on failure
@@ -265,6 +269,15 @@ class JiraClient:
         url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
 
         fields = {}
+
+        if summary:
+            # Strip [#N] if present
+            import re
+            clean_summary = re.sub(r'^\[#.*?\]\s*', '', summary)
+            fields['summary'] = clean_summary
+
+        if description:
+            fields['description'] = self._markdown_to_adf(description)
 
         if priority:
             jira_priority = self.config['jira']['priority_mapping'].get(priority, 'Medium')
@@ -521,7 +534,7 @@ def main():
     elif command == "update":
         # Example: python jira_client.py update AR-123 "개발 진행" "높음" "me" "2026-02-12"
         if len(sys.argv) < 3:
-            print("Usage: python jira_client.py update <issue_key> [status] [priority] [assignee] [duedate]")
+            print("Usage: python jira_client.py update <issue_key> [status] [priority] [assignee] [duedate] [reporter] [summary] [description]")
             sys.exit(1)
 
         status = sys.argv[3] if len(sys.argv) > 3 else None
@@ -536,7 +549,9 @@ def main():
             priority=priority,
             assignee=assignee,
             duedate=duedate,
-            reporter=reporter
+            reporter=reporter,
+            summary=sys.argv[8] if len(sys.argv) > 8 else None,
+            description=sys.argv[9] if len(sys.argv) > 9 else None
         )
         if success:
             print(f"Updated: {sys.argv[2]}")
