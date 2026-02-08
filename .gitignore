@@ -4,4 +4,8 @@ skills/reference
 .agent
 .env
 **/.env
+**/config.local.json
+**/config.yaml
+**/__pycache__
+*.pyc
 skills/shared/task-manager/tasks.md

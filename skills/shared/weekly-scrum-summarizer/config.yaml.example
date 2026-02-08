@@ -1,0 +1,33 @@
+# Weekly Scrum Summarizer Configuration
+# 이 파일을 복사하여 config.yaml로 저장하고 실제 값으로 수정하세요.
+
+obsidian:
+  # Obsidian vault의 절대 경로
+  vault_path: "/path/to/your/obsidian/vault"
+
+  # 주간 보고서를 저장할 폴더명
+  weekly_folder: "group meeting"
+
+team:
+  # 팀원 목록 (한글 이름)
+  members:
+    - 팀원1
+    - 팀원2
+    - 팀원3
+
+  # 팀원별 프로젝트 (2개 이상인 경우만 상위 뎁스로 구분)
+  projects:
+    팀원1:
+      - 프로젝트A
+      - 프로젝트B
+    팀원2:
+      - 프로젝트A
+
+  # 프로젝트별 키워드
+  project_keywords:
+    프로젝트A:
+      - 키워드1
+      - 키워드2
+    프로젝트B:
+      - 키워드3
+      - 키워드4
