@@ -99,7 +99,7 @@ AskUserQuestion with questions:
     "header": "Projects",
     "options": [
       {
-        "label": "글렌즈, 차이홍, 기타",
+        "label": "프로젝트A, 프로젝트B, 기타",
         "description": "기본 프로젝트 섹션 사용 (권장)"
       },
       {
@@ -117,7 +117,7 @@ AskUserQuestion with questions:
    {
      "vault_path": "/Users/username/Documents/Obsidian Vault",
      "daily_notes_path": "Daily Notes",
-     "project_sections": ["글렌즈", "차이홍", "기타"]
+     "project_sections": ["프로젝트A", "프로젝트B", "기타"]
    }
    ```
 
@@ -134,7 +134,7 @@ AskUserQuestion with questions:
 **Handle edge cases:**
 - Invalid vault path: Display error and ask user to edit config.json
 - Malformed JSON: Display error with correct format example
-- `project_sections` missing/empty/invalid: Fallback to `["글렌즈", "차이홍", "기타"]`
+- `project_sections` missing/empty/invalid: Fallback to `["프로젝트A", "프로젝트B", "기타"]`
 
 ### Step 2: Calculate Dates and Paths
 
@@ -159,7 +159,7 @@ python scripts/date_helper.py
     "exists": true
   },
   "config": {
-    "project_sections": ["글렌즈", "차이홍", "기타"]
+    "project_sections": ["프로젝트A", "프로젝트B", "기타"]
   }
 }
 ```
@@ -257,12 +257,12 @@ Parse yesterday's file to extract incomplete TODOs, unresolved Issues, and incom
 Input (yesterday's file, date = 2026-02-09):
 ```markdown
 ## TODOs
-- 글렌즈
+- 프로젝트A
 	- [x] 회의 자료 준비
 	- [ ] 코드 리뷰
 		- [ ] PR #123 리뷰
 		- [x] PR #124 리뷰
-- 차이홍
+- 프로젝트B
 	- [x] 유형 4,5 에이전트 개발
 		- [ ] 테스트 구조 잡아야지 않을까?
 - 기타
@@ -275,10 +275,10 @@ Input (yesterday's file, date = 2026-02-09):
 
 Extracted TODOs (to migrate):
 ```markdown
-- 글렌즈
+- 프로젝트A
 	- [ ] 코드 리뷰 (2/9~)
 		- [ ] PR #123 리뷰
-- 차이홍
+- 프로젝트B
 	- [x] 유형 4,5 에이전트 개발
 		- [ ] 테스트 구조 잡아야지 않을까? (2/9~)
 - 기타
@@ -289,7 +289,7 @@ Extracted TODOs (to migrate):
 ```
 
 Note:
-- `글렌즈` header is included (has unchecked children)
+- `프로젝트A` header is included (has unchecked children)
 - `[x] 회의 자료 준비` is excluded (fully completed, no children)
 - `[x] 유형 4,5 에이전트 개발` is included (has unchecked child) but no date added (it's `[x]`)
 - `오늘 할 일을 작성하세요` is excluded (template placeholder)
@@ -318,13 +318,13 @@ Input (yesterday's file, date = 2026-02-09):
 ## Issues
 - [x] 로그인 버그 (2/8~)
 - [ ] 발생한 문제를 기록하세요 (예: 로그인 API 500 에러)
-- [ ] [글렌즈] 데이터베이스 연결 타임아웃
+- [ ] [프로젝트A] 데이터베이스 연결 타임아웃
 - [ ] API 응답 느림 (2/8~)
 ```
 
 Extracted Issues (to migrate):
 ```markdown
-- [ ] [글렌즈] 데이터베이스 연결 타임아웃 (2/9~)
+- [ ] [프로젝트A] 데이터베이스 연결 타임아웃 (2/9~)
 - [ ] API 응답 느림 (2/8~)
 ```
 
@@ -430,7 +430,7 @@ Display a summary of items to be migrated and use AskUserQuestion for approval.
 📋 어제(2026-02-09)에서 이월할 항목:
 
 ## TODOs (5개)
-- 글렌즈
+- 프로젝트A
 	- [ ] 코드 리뷰 (2/9~)
 		- [ ] PR #123 리뷰 (2/9~)
 - 기타
@@ -440,7 +440,7 @@ Display a summary of items to be migrated and use AskUserQuestion for approval.
 		- [ ] 성능 최적화 아티클 읽기 (2/9~)
 
 ## Issues (2개)
-- [ ] [글렌즈] 데이터베이스 연결 타임아웃 (2/9~)
+- [ ] [프로젝트A] 데이터베이스 연결 타임아웃 (2/9~)
 - [ ] API 응답 느림 (2/8~)
 
 ## Notes (2개)
@@ -699,7 +699,7 @@ User: "다시 일지 만들어줘" (after declining migration)
   {project_name}
   - [ ] (오늘 할 일을 작성하세요)
   ```
-- Default value when config is missing/invalid: `["글렌즈", "차이홍", "기타"]`
+- Default value when config is missing/invalid: `["프로젝트A", "프로젝트B", "기타"]`
 - Supports: Nested sub-tasks, project tags, hierarchical structure
 - Migration: Only unchecked items carry over to next day
 
@@ -800,7 +800,7 @@ User configuration file created interactively on first run. Not included in the 
 {
   "vault_path": "/absolute/path/to/vault",
   "daily_notes_path": "Daily Notes",
-  "project_sections": ["글렌즈", "차이홍", "기타"]
+  "project_sections": ["프로젝트A", "프로젝트B", "기타"]
 }
 ```
 

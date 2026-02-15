@@ -17,7 +17,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DEFAULT_PROJECT_SECTIONS = ["글렌즈", "차이홍", "기타"]
+DEFAULT_PROJECT_SECTIONS = ["프로젝트A", "프로젝트B", "기타"]
 
 
 def normalize_project_sections(value):
