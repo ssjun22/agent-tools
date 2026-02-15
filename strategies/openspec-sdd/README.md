@@ -6,28 +6,28 @@ OpenSpec의 `openspec/` 폴더를 프로젝트의 **single source of truth**로 
 
 ## 사용 방법 (중요)
 
-이 경로에는 OpenSpec 기본 제공 외에 커스텀 스킬이 포함되어 있다.
+이 전략은 **skills-only**로 운영한다. (`.claude/commands`, `.codex/prompts` 등은 사용하지 않음)
 
-- `opsx:seed` (기존 코드 기반 spec 생성, 커스텀 추가)
-- `opsx:audit-spec` (main spec-코드 정합성 감사, 커스텀 추가)
+운영 순서:
+1. 이 전략의 `skills/`를 대상 프로젝트의 skills 경로에 **덮어쓰기**
+2. Claude/Codex 모두 skills만 사용해 호출
 
-또한 커스텀 플로우를 위해 기존 OpenSpec 스킬 일부를 오버라이드한다.
+`/Users/choiyoungjun/agent-tools/strategies/openspec-sdd/skills`에는 아래가 포함되어 있다.
 
-- `opsx:explore` (기존 `openspec-explore` 오버라이드)
-- `opsx:new` (기존 `openspec-new-change` 오버라이드)
-- `opsx:verify` (기존 `openspec-verify-change` 오버라이드)
+- OpenSpec 기본 스킬 전체(전략 수록): `apply`, `archive`, `bulk-archive`, `continue`, `explore`, `ff`, `new`, `onboard`, `sync`, `verify`
+- 커스텀 추가 스킬: `seed`, `audit-spec`
+- 커스텀 참조를 위해 오버라이드된 스킬: `explore`, `new`, `verify`
 
 네이밍 통일 규칙:
-- Claude Code와 Codex 모두에서 스킬 `name`은 `/opsx:*` 커맨드와 동일한 네임스페이스로 통일한다.
-- 즉, 명령어와 스킬 식별자를 같은 이름으로 맞춰 런타임 간 차이를 줄인다.
-
-중요: 반드시 `openspec init`을 먼저 수행한 뒤, 이 전략의 `skills/` 내용을 프로젝트에 생성된 OpenSpec 스킬 위치에 **덮어써서** 사용해야 한다.
+- 폴더명은 `openspec-*` 형식 유지
+- `SKILL.md` 내부 `name`은 모두 `opsx:*` 형식 사용
+- Claude Code/Codex에서 동일한 `opsx:*` 네임스페이스로 호출
 
 ## 핵심 원칙
 
 1. **Lazy Loading** — openspec/ 전체를 읽지 않고, 폴더 구조를 인덱스로 활용하여 필요한 파일만 읽는다
 2. **opsx flow 강제** — 스펙 변경 시 직접 수정 금지, 반드시 `/opsx:new`부터 시작
-3. **OpenSpec 기존 명령어 활용** — 별도 스킬 없이 opsx 명령어 + CLAUDE.md 규칙으로 운영
+3. **Skills-Only Single Source** — 명령어 레이어 없이 `skills/`만 단일 소스로 관리한다
 
 ## 전체 SDD Flow
 
@@ -93,20 +93,22 @@ openspec/
     └── 2026-02-11-add-eval/
 ```
 
-## opsx 명령어 요약
+## opsx 스킬 호출 요약
 
 | 명령어 | 역할 | 언제 사용 | 출처 |
 |--------|------|----------|------|
+| `/opsx:onboard` | OpenSpec 워크플로우 온보딩 | 초기 셋업/진입 시 | OpenSpec 기본(전략 수록) |
 | `/opsx:explore` | 아이디어 탐색, 코드베이스 조사 | 요구사항 불명확할 때 | OpenSpec(오버라이드) |
+| `/opsx:new` | 새 change 폴더 생성 | 새 기능 or 스펙 변경 시 | OpenSpec(오버라이드) |
+| `/opsx:ff` | 전체 artifact 한번에 생성 | 명확한 요구사항일 때 | OpenSpec 기본(전략 수록) |
+| `/opsx:continue` | artifact 하나씩 생성 | 단계별 리뷰가 필요할 때 | OpenSpec 기본(전략 수록) |
+| `/opsx:apply` | tasks.md 기반 구현 | 구현 단계 | OpenSpec 기본(전략 수록) |
+| `/opsx:verify` | 구현-스펙 일치 검증 | archive 전 | OpenSpec(오버라이드) |
+| `/opsx:sync` | delta → main 병합 (archive 없이) | 장기 change의 중간 동기화 | OpenSpec 기본(전략 수록) |
+| `/opsx:archive` | 완료 + archive + 병합 | 모든 작업 완료 시 | OpenSpec 기본(전략 수록) |
+| `/opsx:bulk-archive` | 여러 change 일괄 archive | 동시 정리/배치 아카이브 시 | OpenSpec 기본(전략 수록) |
 | `/opsx:seed` | 기존 코드에서 초기 spec 생성 | 코드는 있지만 spec이 없을 때 | 커스텀(직접 추가) |
 | `/opsx:audit-spec` | main spec과 코드 동작의 정합성 감사 | spec 정확도 점검/정기 점검 시 | 커스텀(직접 추가) |
-| `/opsx:new` | 새 change 폴더 생성 | 새 기능 or 스펙 변경 시 | OpenSpec(오버라이드) |
-| `/opsx:ff` | 전체 artifact 한번에 생성 | 명확한 요구사항일 때 | OpenSpec |
-| `/opsx:continue` | artifact 하나씩 생성 | 단계별 리뷰가 필요할 때 | OpenSpec |
-| `/opsx:apply` | tasks.md 기반 구현 | 구현 단계 | OpenSpec |
-| `/opsx:verify` | 구현-스펙 일치 검증 | archive 전 | OpenSpec(오버라이드) |
-| `/opsx:sync` | delta → main 병합 (archive 없이) | 장기 change의 중간 동기화 | OpenSpec |
-| `/opsx:archive` | 완료 + archive + 병합 | 모든 작업 완료 시 | OpenSpec |
 
 > `커스텀(직접 추가)` = OpenSpec 기본 제공이 아닌, 이 전략(`openspec-sdd`)에서 직접 추가한 명령/스킬
 
