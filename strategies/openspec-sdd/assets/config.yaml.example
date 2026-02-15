@@ -1,0 +1,39 @@
+# openspec/config.yaml 샘플
+# 프로젝트의 openspec/ 디렉토리에 config.yaml로 복사하여 사용
+# 참고: https://github.com/Fission-AI/OpenSpec/blob/main/docs/customization.md
+
+schema: spec-driven
+
+# 모든 artifact 생성 시 주입되는 프로젝트 컨텍스트
+# 간결하게 유지할 것 (매 요청마다 주입됨)
+context: |
+  프로젝트명: {프로젝트명}
+  Tech stack: {언어, 프레임워크, DB 등}
+  Testing: {테스트 프레임워크}
+  Architecture: {아키텍처 개요}
+
+# artifact별 규칙 (해당 artifact 생성 시에만 주입)
+# 핵심: artifact 간 참조 의존성을 명시하여 AI가 맥락을 놓치지 않도록 함
+rules:
+  proposal:
+    # 프로젝트별 규칙
+    - 영향받는 모듈/서비스 목록을 명시하라
+    - 기존 API 변경 시 breaking change 여부를 표시하라
+    # SDD 의존성 규칙
+    - Capabilities 섹션에서 openspec/specs/ 기존 스펙을 확인한 후 New/Modified를 구분하라
+  specs:
+    # Delta spec 규칙 (패키지 내부 instruction 보완)
+    - WHEN/THEN 형식으로 시나리오를 작성하라
+    - 기존 spec 변경 시 반드시 MODIFIED/REMOVED 섹션을 사용하라
+    - MODIFIED는 openspec/specs/에서 기존 requirement 전체를 복사한 후 수정하라
+    - REMOVED는 Reason과 Migration을 포함하라
+    # 의존성 규칙
+    - proposal.md의 Capabilities 섹션을 기준으로 spec 파일을 생성하라
+  design:
+    # 의존성 규칙
+    - specs/의 요구사항을 기반으로 기술 설계를 작성하라
+    - 기존 코드 구조를 확인한 후 변경 범위를 명시하라
+  tasks:
+    # 의존성 규칙
+    - design.md의 결정사항과 specs/의 시나리오를 태스크로 분해하라
+    - 각 태스크가 어떤 requirement/scenario를 구현하는지 명시하라
