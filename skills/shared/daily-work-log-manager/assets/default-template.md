@@ -1,14 +1,16 @@
 # {DATE}
 
 ## TODOs
-- [ ] 오늘 할 일을 작성하세요
+{PROJECT_TODOS}
+
+## Meetings
+- (회의 내용을 기록하세요)
 
 ## Issues
-- [ ] 발생한 문제를 기록하세요 (예: 로그인 API 500 에러)
+- [ ] (발생한 이슈를 기록하세요)
 
 ## Notes
-- 자유롭게 메모하세요
+- (자유롭게 메모를 작성하세요)
 
 ## Articles
-- https://example.com/article1
-- https://example.com/article2
+- (관심있는 기사 URL을 입력하세요)

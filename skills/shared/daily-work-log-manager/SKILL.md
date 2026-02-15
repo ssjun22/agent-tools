@@ -1,6 +1,6 @@
 ---
 name: daily-work-log-manager
-description: Daily work journal manager with automatic TODO/Issue tracking from previous day. This skill should be used when users want to create daily work logs in Obsidian vault, migrate incomplete tasks from yesterday, or set up structured daily notes. Triggered when users request to create today's work log, start daily journal, or initialize daily work notes.
+description: Daily work journal manager with automatic TODO/Issue/Notes tracking from previous day. This skill should be used when users want to create daily work logs in Obsidian vault, migrate incomplete tasks from yesterday, or set up structured daily notes. Triggered when users request to create today's work log, start daily journal, or initialize daily work notes.
 allowed-tools: Read, Write, Bash
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Bash
 
 ## Overview
 
-Automate daily work journal creation by migrating incomplete TODOs and unresolved Issues from yesterday's file to today's file in Obsidian vault. Transform manual daily note-taking into a streamlined workflow that preserves task continuity across days.
+Automate daily work journal creation by migrating incomplete TODOs, unresolved Issues, and incomplete Notes from yesterday's file to today's file in Obsidian vault. Transform manual daily note-taking into a streamlined workflow that preserves task continuity across days.
 
 **Important:** This skill operates on Obsidian vault files with a specific directory structure: `Daily Notes/YYYY/M월/YYYY-MM-DD.md`
 
@@ -39,7 +39,7 @@ Use this skill when:
 
 - Starting the workday and need to create today's work log
 - Migrating incomplete tasks from yesterday to today
-- Setting up structured daily notes with TODOs, Issues, Notes, and Articles sections
+- Setting up structured daily notes with TODOs, Meetings, Issues, Notes, and Articles sections
 - Maintaining daily work journals with automatic task tracking
 
 ## Workflow
@@ -93,6 +93,21 @@ AskUserQuestion with questions:
       }
     ],
     "multiSelect": false
+  },
+  {
+    "question": "TODO 기본 프로젝트 섹션을 선택하세요",
+    "header": "Projects",
+    "options": [
+      {
+        "label": "글렌즈, 차이홍, 기타",
+        "description": "기본 프로젝트 섹션 사용 (권장)"
+      },
+      {
+        "label": "생성 후 직접 수정",
+        "description": "config.json의 project_sections를 원하는 값으로 수정"
+      }
+    ],
+    "multiSelect": false
   }
 ]
 ```
@@ -101,11 +116,12 @@ AskUserQuestion with questions:
    ```json
    {
      "vault_path": "/Users/username/Documents/Obsidian Vault",
-     "daily_notes_path": "Daily Notes"
+     "daily_notes_path": "Daily Notes",
+     "project_sections": ["글렌즈", "차이홍", "기타"]
    }
    ```
 
-4. Confirm creation:
+3. Confirm creation:
    ```
    "✅ config.json이 생성되었습니다. 계속 진행합니다."
    ```
@@ -118,6 +134,7 @@ AskUserQuestion with questions:
 **Handle edge cases:**
 - Invalid vault path: Display error and ask user to edit config.json
 - Malformed JSON: Display error with correct format example
+- `project_sections` missing/empty/invalid: Fallback to `["글렌즈", "차이홍", "기타"]`
 
 ### Step 2: Calculate Dates and Paths
 
@@ -140,6 +157,9 @@ python scripts/date_helper.py
     "date": "2026-02-09",
     "path": "/absolute/path/Daily Notes/2026/2월/2026-02-09.md",
     "exists": true
+  },
+  "config": {
+    "project_sections": ["글렌즈", "차이홍", "기타"]
   }
 }
 ```
@@ -152,6 +172,7 @@ python scripts/date_helper.py
 - `yesterday.date`: Yesterday's date string
 - `yesterday.path`: Full path to yesterday's file
 - `yesterday.exists`: Boolean indicating if yesterday's file exists
+- `config.project_sections`: TODO 기본 프로젝트 섹션 목록
 
 **Handle script errors:**
 - `{"error": "..."}`: Display error message and troubleshooting guidance
@@ -188,78 +209,201 @@ Skip to Step 7 (directory check) and use `assets/default-template.md` as the bas
 
 ### Step 4: Parse Incomplete Items
 
-Parse yesterday's file to extract incomplete TODOs and unresolved Issues.
+Parse yesterday's file to extract incomplete TODOs, unresolved Issues, and incomplete Notes.
+
+**Origin Date Tracking Rule (all sections):**
+
+이월 시 `- [ ]` 항목에 시작일 `(M/D~)` 을 계층적으로 추가합니다:
+- 이미 `(M/D~)` 가 있는 항목: **그대로 유지** (최초 시작일 보존)
+- `(M/D~)` 가 없는 항목: **어제 날짜를 `(M/D~)` 형식으로 추가**
+- **계층적 날짜 규칙** (중복 제거):
+  - 부모와 모든 직계 자식이 **같은 날짜**인 경우: 부모에만 날짜 표시, 자식은 생략
+  - 자식이 **다른 날짜**를 가진 경우: 해당 자식에만 별도 날짜 표시
+  - 형제 항목 간에도 같은 날짜면 가장 상위 공통 부모에만 표시
+  - 이를 통해 가독성을 높이고 불필요한 날짜 중복을 제거
+- 날짜는 0 패딩 없이 표기 (예: `(2/9~)`, `(12/1~)`)
+- `[x]` 항목이나 plain text 항목(프로젝트명 헤더 등)에는 날짜를 추가하지 않음
+- 날짜는 항목 텍스트 맨 끝에 공백 하나 후 추가: `- [ ] 내용 (M/D~)`
 
 **TODOs Parsing Rules:**
 
 1. Locate the `## TODOs` section
-2. Extract all lines matching pattern: `- [ ] ...` (unchecked items only)
+2. **TODOs는 프로젝트별 그룹 구조를 사용:**
+   - 프로젝트명은 `- 프로젝트명` 형식의 plain text bullet (체크박스 없음)
+   - TODO 항목은 프로젝트명 아래 들여쓰기된 `- [ ] ...` 형식
 3. **Preserve structure:**
    - Keep all indentation (spaces/tabs) exactly as written
-   - Maintain hierarchical relationships (parent/child tasks)
-   - Preserve project tags like `[글렌즈]` or `[프로젝트명]`
+   - Maintain hierarchical relationships (project → task → sub-task)
    - Keep all nested sub-tasks with their indentation
 
-4. **Exclude completed items:**
-   - Ignore lines matching `- [x] ...` (checked items)
+4. **Handle nested TODOs with completed parents:**
+   - If parent is `[x]` but has child `[ ]` items: Include entire tree (parent + all children)
+   - Preserve parent's `[x]` status to maintain context
+
+5. **Include project header if it has unchecked children:**
+   - If a project group has any `[ ]` items, include the project name header
+   - Exclude project groups where all items are `[x]` (fully completed)
+
+6. **Exclude fully completed items:**
+   - Only ignore `[x]` items that have no unchecked children
+
+7. **Exclude template placeholders:**
+   - Skip items matching: `오늘 할 일을 작성하세요` or similar placeholder text
+
+8. **Add origin date:** Apply Origin Date Tracking Rule to all `- [ ]` items
 
 **Example parsing:**
 
-Input (yesterday's file):
+Input (yesterday's file, date = 2026-02-09):
 ```markdown
 ## TODOs
-- [x] [글렌즈] 회의 자료 준비
-- [ ] [글렌즈] 코드 리뷰
-  - [ ] PR #123 리뷰
-  - [x] PR #124 리뷰
-- [ ] [사이드 프로젝트] 문서 작성
-- [ ] 개인 학습
-  - [ ] React 19 튜토리얼
-  - [ ] 성능 최적화 아티클 읽기
+- 글렌즈
+	- [x] 회의 자료 준비
+	- [ ] 코드 리뷰
+		- [ ] PR #123 리뷰
+		- [x] PR #124 리뷰
+- 차이홍
+	- [x] 유형 4,5 에이전트 개발
+		- [ ] 테스트 구조 잡아야지 않을까?
+- 기타
+	- [ ] 문서 작성 (2/7~)
+	- [ ] 개인 학습
+		- [ ] React 19 튜토리얼
+		- [ ] 성능 최적화 아티클 읽기
+	- [ ] 오늘 할 일을 작성하세요
 ```
 
 Extracted TODOs (to migrate):
 ```markdown
-- [ ] [글렌즈] 코드 리뷰
-  - [ ] PR #123 리뷰
-- [ ] [사이드 프로젝트] 문서 작성
-- [ ] 개인 학습
-  - [ ] React 19 튜토리얼
-  - [ ] 성능 최적화 아티클 읽기
+- 글렌즈
+	- [ ] 코드 리뷰 (2/9~)
+		- [ ] PR #123 리뷰
+- 차이홍
+	- [x] 유형 4,5 에이전트 개발
+		- [ ] 테스트 구조 잡아야지 않을까? (2/9~)
+- 기타
+	- [ ] 문서 작성 (2/7~)
+	- [ ] 개인 학습 (2/9~)
+		- [ ] React 19 튜토리얼
+		- [ ] 성능 최적화 아티클 읽기
 ```
+
+Note:
+- `글렌즈` header is included (has unchecked children)
+- `[x] 회의 자료 준비` is excluded (fully completed, no children)
+- `[x] 유형 4,5 에이전트 개발` is included (has unchecked child) but no date added (it's `[x]`)
+- `오늘 할 일을 작성하세요` is excluded (template placeholder)
+- `문서 작성 (2/7~)` preserves existing origin date
+- **Hierarchical date rule applied:** child items under same-dated parents have dates removed
+  - `코드 리뷰 (2/9~)` parent has date, child `PR #123 리뷰` inherits from parent
+  - `개인 학습 (2/9~)` parent has date, children inherit from parent
 
 **Issues Parsing Rules:**
 
 1. Locate the `## Issues` section
 2. Extract all lines matching pattern: `- [ ] ...` (unchecked items only)
-3. **Date tracking:**
-   - If issue already has date format `(M/D~)`: Preserve it
-   - If issue has no date: Add yesterday's date in format `(M/D~)`
-   - Use simplified month/day format (e.g., `2/9~`, `12/31~`)
+3. **Exclude template placeholders:**
+   - Skip items containing: `발생한 문제를 기록하세요`, `발생한 이슈를 기록하세요`, or similar placeholder text
+   - Skip items with `(예:` pattern (example indicators)
 
 4. **Exclude resolved items:**
    - Ignore lines matching `- [x] ...` (checked items)
 
+5. **Add origin date:** Apply Origin Date Tracking Rule to all `- [ ]` items
+
 **Example parsing:**
 
-Input (yesterday's file):
+Input (yesterday's file, date = 2026-02-09):
 ```markdown
 ## Issues
 - [x] 로그인 버그 (2/8~)
+- [ ] 발생한 문제를 기록하세요 (예: 로그인 API 500 에러)
 - [ ] [글렌즈] 데이터베이스 연결 타임아웃
-- [ ] API 응답 느림 (2/9~)
+- [ ] API 응답 느림 (2/8~)
 ```
 
-Extracted Issues (to migrate), assuming yesterday = 2026-02-09:
+Extracted Issues (to migrate):
 ```markdown
 - [ ] [글렌즈] 데이터베이스 연결 타임아웃 (2/9~)
-- [ ] API 응답 느림 (2/9~)
+- [ ] API 응답 느림 (2/8~)
 ```
 
-**Notes and Articles:**
-- Do NOT parse or migrate Notes section
+Note:
+- `로그인 버그` is excluded (resolved with `[x]`)
+- `발생한 문제를 기록하세요` is excluded (template placeholder)
+- `데이터베이스 연결 타임아웃` gets `(2/9~)` added (no existing date)
+- `API 응답 느림 (2/8~)` preserves existing origin date
+
+**Notes Parsing Rules:**
+
+1. Locate the `## Notes` section
+2. Extract all lines matching pattern: `- [ ] ...` (unchecked items only) and their parent context
+3. **Include parent context for nested `[ ]` items:**
+   - If a `- [ ]` item is nested under a plain text bullet, include the parent bullet for context
+   - Preserve indentation hierarchy
+4. **Exclude template placeholders:**
+   - Skip items containing: `자유롭게 메모를 작성하세요` or similar placeholder text
+5. **Exclude resolved items:**
+   - Ignore lines matching `- [x] ...` (checked items)
+
+6. **Add origin date:** Apply Origin Date Tracking Rule to all `- [ ]` items
+
+**Example parsing:**
+
+Input (yesterday's file, date = 2026-02-09):
+```markdown
+## Notes
+- openspec 기반 SDD 전략 정리중
+	- openspec을 single source로 한다는 내용을 rules에 명시
+	- [ ] 이미 존재하는 코드 기반으로 spec을 정리해야하는 경우 구현중 (seed)
+	- [ ] 이미 존재하는 spec에서 변경사항이 생긴 케이스 테스트 필요 (2/8~)
+- 점심 메뉴 고민
+```
+
+Extracted Notes (to migrate):
+```markdown
+- openspec 기반 SDD 전략 정리중
+	- [ ] 이미 존재하는 코드 기반으로 spec을 정리해야하는 경우 구현중 (seed) (2/9~)
+	- [ ] 이미 존재하는 spec에서 변경사항이 생긴 케이스 테스트 필요 (2/8~)
+```
+
+Note:
+- Parent bullet `openspec 기반 SDD 전략 정리중` is included for context (has `[ ]` children), no date added (plain text)
+- Plain text child `openspec을 single source로...` is excluded (no `[ ]`)
+- `점심 메뉴 고민` is excluded (no `[ ]` items)
+- `spec 정리 구현중` gets `(2/9~)` added (no existing date)
+- `변경사항 테스트 필요 (2/8~)` preserves existing origin date (different from yesterday)
+- Since the two `[ ]` items have different dates, each keeps its own date
+
+**Example with hierarchical date rule:**
+
+Input (yesterday's file, date = 2026-02-14):
+```markdown
+## Notes
+- openspec 기반 SDD 전략 정리중
+	- [ ] verify-spec 추가했음
+		- [ ] commands, skill 차이 확인 필요
+		- [ ] seed 이후 verify-spec 정리 필요
+		- [ ] codex에선 어떻게 쓰지?
+```
+
+Extracted Notes (to migrate):
+```markdown
+- openspec 기반 SDD 전략 정리중
+	- [ ] verify-spec 추가했음 (2/14~)
+		- [ ] commands, skill 차이 확인 필요
+		- [ ] seed 이후 verify-spec 정리 필요
+		- [ ] codex에선 어떻게 쓰지?
+```
+
+Note:
+- **Hierarchical date rule applied:** parent `verify-spec 추가했음` has date, all children inherit (no duplicate dates)
+- All items started on the same date (2/14), so only the parent shows `(2/14~)`
+- This improves readability by removing redundant date markers
+
+**Articles:**
 - Do NOT parse or migrate Articles section
-- These sections always start empty in today's file
+- Articles section always starts empty in today's file
 
 ### Step 5: Display Summary and Get User Confirmation
 
@@ -274,7 +418,10 @@ Display a summary of items to be migrated and use AskUserQuestion for approval.
 [display extracted TODOs with full structure]
 
 ## Issues (N개)
-[display extracted Issues with dates]
+[display extracted Issues]
+
+## Notes (N개)
+[display extracted Notes with [ ] items and parent context]
 ```
 
 **Example summary:**
@@ -283,16 +430,23 @@ Display a summary of items to be migrated and use AskUserQuestion for approval.
 📋 어제(2026-02-09)에서 이월할 항목:
 
 ## TODOs (5개)
-- [ ] [글렌즈] 코드 리뷰
-  - [ ] PR #123 리뷰
-- [ ] [사이드 프로젝트] 문서 작성
-- [ ] 개인 학습
-  - [ ] React 19 튜토리얼
-  - [ ] 성능 최적화 아티클 읽기
+- 글렌즈
+	- [ ] 코드 리뷰 (2/9~)
+		- [ ] PR #123 리뷰 (2/9~)
+- 기타
+	- [ ] 문서 작성 (2/7~)
+	- [ ] 개인 학습 (2/9~)
+		- [ ] React 19 튜토리얼 (2/9~)
+		- [ ] 성능 최적화 아티클 읽기 (2/9~)
 
 ## Issues (2개)
 - [ ] [글렌즈] 데이터베이스 연결 타임아웃 (2/9~)
-- [ ] API 응답 느림 (2/9~)
+- [ ] API 응답 느림 (2/8~)
+
+## Notes (2개)
+- openspec 기반 SDD 전략 정리중
+	- [ ] spec 정리 구현중 (seed) (2/9~)
+	- [ ] 변경사항이 생긴 케이스 테스트 필요 (2/8~)
 ```
 
 **Then use AskUserQuestion:**
@@ -387,27 +541,53 @@ Generate today's work log file using Write tool.
 # YYYY-MM-DD
 
 ## TODOs
-[migrated TODOs from Step 4, or empty if using default template]
+[migrated TODOs from Step 4, or config.project_sections 기반 project template if no items to migrate]
+
+## Meetings
+- (회의 내용을 기록하세요)
 
 ## Issues
-[migrated Issues from Step 4 with dates, or empty if using default template]
+[migrated Issues from Step 4 without inline dates, or "- [ ] (발생한 이슈를 기록하세요)" if no items to migrate]
 
 ## Notes
+[migrated Notes with [ ] items from Step 4, or "- (자유롭게 메모를 작성하세요)" if no items to migrate]
 
 ## Articles
+- (관심있는 기사 URL을 입력하세요)
 ```
 
 **If using default template** (no yesterday file):
 
-Use content from `assets/default-template.md` with `{DATE}` replaced by `today.date`.
+Use content from `assets/default-template.md` with two replacements:
+- `{DATE}` → `today.date`
+- `{PROJECT_TODOS}` → `config.project_sections`를 아래 형식으로 렌더링한 문자열
+  - 형식: `프로젝트명` 줄 다음 `- [ ] (오늘 할 일을 작성하세요)`
+  - 각 프로젝트 블록 사이에 빈 줄 1개 추가
 
 **If migrating from yesterday**:
 
 1. Start with header: `# {today.date}`
-2. Add TODOs section with migrated items (preserve indentation/structure)
-3. Add Issues section with migrated items (with dates)
-4. Add empty Notes section: `## Notes\n\n`
-5. Add empty Articles section: `## Articles\n\n`
+2. Add TODOs section:
+   - If items to migrate: Add migrated TODOs (preserve indentation/structure)
+   - If no items: Build project template from `config.project_sections`
+     ```markdown
+     {project_name_1}
+     - [ ] (오늘 할 일을 작성하세요)
+
+     {project_name_2}
+     - [ ] (오늘 할 일을 작성하세요)
+
+     {project_name_3}
+     - [ ] (오늘 할 일을 작성하세요)
+     ```
+3. Add Meetings section with placeholder: `## Meetings\n- (회의 내용을 기록하세요)\n\n`
+4. Add Issues section:
+   - If items to migrate: Add migrated Issues (without inline dates)
+   - If no items: Add placeholder: `- [ ] (발생한 이슈를 기록하세요)`
+5. Add Notes section:
+   - If `[ ]` items to migrate: Add migrated Notes (with parent context)
+   - If no items: Add placeholder: `- (자유롭게 메모를 작성하세요)`
+6. Add Articles section with placeholder: `## Articles\n- (관심있는 기사 URL을 입력하세요)\n\n`
 
 **Write the file:**
 
@@ -458,6 +638,7 @@ After successfully creating today's file, display completion message:
 📋 이월된 항목:
 - TODOs: N개
 - Issues: N개
+- Notes: N개
 
 Obsidian에서 파일을 열어 작업을 시작하세요.
 ```
@@ -513,20 +694,29 @@ User: "다시 일지 만들어줘" (after declining migration)
 
 **TODOs Section:**
 - Purpose: Track daily tasks with checkbox completion
-- Format: `- [ ] Task description`
+- Default format (from `config.project_sections`):
+  ```markdown
+  {project_name}
+  - [ ] (오늘 할 일을 작성하세요)
+  ```
+- Default value when config is missing/invalid: `["글렌즈", "차이홍", "기타"]`
 - Supports: Nested sub-tasks, project tags, hierarchical structure
 - Migration: Only unchecked items carry over to next day
 
+**Meetings Section:**
+- Purpose: Record meeting notes and discussions
+- Format: Unstructured markdown
+- Migration: Never migrates (always starts empty)
+
 **Issues Section:**
-- Purpose: Track ongoing problems/bugs with date tracking
-- Format: `- [ ] Issue description (M/D~)`
-- Date tracking: Auto-added on first occurrence, preserved on migration
-- Migration: Only unchecked items carry over with date
+- Purpose: Track ongoing problems/bugs
+- Format: `- [ ] Issue description`
+- Migration: Only unchecked items carry over (inline dates removed if present)
 
 **Notes Section:**
 - Purpose: Free-form memo space for daily reflections
-- Format: Unstructured markdown
-- Migration: Never migrates (always starts empty)
+- Format: Unstructured markdown with optional `- [ ]` tasks
+- Migration: Only `- [ ]` items (and their parent context) carry over to next day
 
 **Articles Section:**
 - Purpose: URL collection for reference or other skill integration
@@ -597,7 +787,9 @@ python scripts/date_helper.py [--config CONFIG_PATH]
 
 Default template used when yesterday's file doesn't exist (first-time use or missing file).
 
-Contains placeholder sections with guidance text for each section (TODOs, Issues, Notes, Articles).
+Contains placeholders for dynamic rendering:
+- `{DATE}` for title date
+- `{PROJECT_TODOS}` for TODO blocks generated from `config.project_sections`
 
 ### config.json (user-created)
 
@@ -607,7 +799,8 @@ User configuration file created interactively on first run. Not included in the 
 ```json
 {
   "vault_path": "/absolute/path/to/vault",
-  "daily_notes_path": "Daily Notes"
+  "daily_notes_path": "Daily Notes",
+  "project_sections": ["글렌즈", "차이홍", "기타"]
 }
 ```
 
@@ -619,7 +812,7 @@ User configuration file created interactively on first run. Not included in the 
 
 - This skill operates entirely within Claude Code; no external API calls required
 - Parsing and migration logic is performed by Claude using Read/Write tools
-- The script only handles date calculations; all content processing is done by Claude
+- The script handles date/path calculation and normalized `project_sections`; content parsing is done by Claude
 - Complex TODO structures (nested, tagged) are preserved through exact indentation matching
 - Date format uses Korean month notation (e.g., "2월") for natural language consistency
 - Files use YYYY-MM-DD.md naming for chronological sorting and international compatibility

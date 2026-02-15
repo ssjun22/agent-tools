@@ -17,6 +17,38 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+DEFAULT_PROJECT_SECTIONS = ["글렌즈", "차이홍", "기타"]
+
+
+def normalize_project_sections(value):
+    """
+    Normalize project section names from config.
+
+    Args:
+        value: Any config value intended for project_sections
+
+    Returns:
+        list[str]: Cleaned section names. Falls back to defaults when empty/invalid.
+    """
+    if not isinstance(value, list):
+        return DEFAULT_PROJECT_SECTIONS.copy()
+
+    cleaned = []
+    seen = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if not name or name in seen:
+            continue
+        cleaned.append(name)
+        seen.add(name)
+
+    if not cleaned:
+        return DEFAULT_PROJECT_SECTIONS.copy()
+
+    return cleaned
+
 
 def get_daily_paths(config_path="config.json"):
     """
@@ -51,6 +83,7 @@ def get_daily_paths(config_path="config.json"):
 
     vault_path = Path(config["vault_path"]).expanduser()
     daily_notes = config["daily_notes_path"]
+    project_sections = normalize_project_sections(config.get("project_sections"))
 
     # Calculate dates
     today = datetime.now()
@@ -78,6 +111,9 @@ def get_daily_paths(config_path="config.json"):
             "date": yesterday.strftime("%Y-%m-%d"),
             "path": str(yesterday_path),
             "exists": yesterday_path.exists()
+        },
+        "config": {
+            "project_sections": project_sections
         }
     }
 

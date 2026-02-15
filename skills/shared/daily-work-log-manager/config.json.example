@@ -1,4 +1,5 @@
 {
   "vault_path": "/Users/username/Documents/Obsidian Vault",
-  "daily_notes_path": "Daily Notes"
+  "daily_notes_path": "Daily Notes",
+  "project_sections": ["글렌즈", "차이홍", "기타"]
 }

@@ -9,3 +9,4 @@ skills/reference
 **/__pycache__
 *.pyc
 skills/shared/task-manager/tasks.md
+.codex
