@@ -15,7 +15,7 @@ OpenSpec의 `openspec/` 폴더를 프로젝트의 **single source of truth**로 
 `/Users/choiyoungjun/agent-tools/strategies/openspec-sdd/skills`에는 아래가 포함되어 있다.
 
 - OpenSpec 기본 스킬 전체(전략 수록): `apply`, `archive`, `bulk-archive`, `continue`, `explore`, `ff`, `new`, `onboard`, `sync`, `verify`
-- 커스텀 추가 스킬: `seed`, `audit-spec`
+- 커스텀 추가 스킬: `seed`, `audit-spec`, `elaborate-spec`
 - 커스텀 참조를 위해 오버라이드된 스킬: `explore`, `new`, `verify`
 
 네이밍 통일 규칙:
@@ -109,6 +109,7 @@ openspec/
 | `/opsx:bulk-archive` | 여러 change 일괄 archive | 동시 정리/배치 아카이브 시 | OpenSpec 기본(전략 수록) |
 | `/opsx:seed` | 기존 코드에서 초기 spec 생성 | 코드는 있지만 spec이 없을 때 | 커스텀(직접 추가) |
 | `/opsx:audit-spec` | main spec과 코드 동작의 정합성 감사 | spec 정확도 점검/정기 점검 시 | 커스텀(직접 추가) |
+| `/opsx:elaborate-spec` | 특정 main spec 구체화/상세화 | 시드된 spec의 밀도를 높일 때 | 커스텀(직접 추가) |
 
 > `커스텀(직접 추가)` = OpenSpec 기본 제공이 아닌, 이 전략(`openspec-sdd`)에서 직접 추가한 명령/스킬
 
@@ -122,6 +123,7 @@ flowchart LR
 
     subgraph "스펙 부트스트랩"
         seed["/opsx:seed"]
+        elaborate["/opsx:elaborate-spec"]
     end
 
     subgraph "변경 생성"
@@ -146,8 +148,10 @@ flowchart LR
     explore -->|"빠른 진행"| ff
     explore -->|"코드는 있지만 spec 없음"| seed
     explore -->|"spec 정합성 점검"| audit
+    explore -->|"기존 spec 구체화"| elaborate
 
     seed -->|"Brownfield 필수 감사"| audit
+    elaborate -->|"상세화 후 감사"| audit
     audit -->|"정합성 이슈/행동 변경"| new
     audit -->|"정합성 OK"| spec_ready
 
@@ -167,6 +171,7 @@ flowchart LR
 - **새 프로젝트**: `/opsx:new` → `/opsx:ff` → `/opsx:apply` → `/opsx:verify` → `/opsx:archive`
 - **기존 코드 문서화 (필수 감사)**: `/opsx:seed` → `/opsx:audit-spec`(필수) → (이슈 발견 시) `/opsx:new` → ...
 - **기존 spec 점검**: `/opsx:audit-spec` → (이슈 발견 시) `/opsx:new` → ...
+- **기존 spec 구체화**: `/opsx:elaborate-spec` → `/opsx:audit-spec` → (행동 변경 필요 시) `/opsx:new` → ...
 - **아이디어 단계**: `/opsx:explore` → `/opsx:seed` 또는 `/opsx:new` → ...
 - **장기 변경**: ... → `/opsx:sync` (중간 병합) → ... → `/opsx:archive`
 

@@ -25,6 +25,7 @@ Help users quickly understand and start the OpenSpec SDD workflow.
 2. **Classify current user intent**
    - New feature or behavior change -> `/opsx:new`
    - Existing code documentation -> `/opsx:seed`
+   - Existing main spec elaboration (within current behavior scope) -> `/opsx:elaborate-spec`
    - Existing change progress -> `/opsx:continue` or `/opsx:ff`
    - Implementation step -> `/opsx:apply`
    - Pre-archive validation -> `/opsx:verify`
@@ -36,7 +37,7 @@ Help users quickly understand and start the OpenSpec SDD workflow.
 
 4. **Offer a short command cheat sheet**
    - `/opsx:new`, `/opsx:ff`, `/opsx:continue`, `/opsx:apply`, `/opsx:verify`, `/opsx:archive`
-   - `/opsx:seed`, `/opsx:audit-spec` for brownfield flows.
+   - `/opsx:seed`, `/opsx:elaborate-spec`, `/opsx:audit-spec` for brownfield/spec-maintenance flows.
 
 **Output**
 
