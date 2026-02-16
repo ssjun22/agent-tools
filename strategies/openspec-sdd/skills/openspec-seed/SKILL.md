@@ -43,6 +43,10 @@ compatibility: Requires openspec CLI.
 - **Overwrite** — 새로 분석하여 덮어쓰기
 - **Cancel** — 중단, `/opsx:new`로 수정 권장
 
+분기 기준:
+- 현재 코드에서 관찰되는 동작 범위 안에서 requirement/scenario를 세분화·명확화하려면 `/opsx:elaborate-spec`를 안내한다.
+- 새로운 동작 추가, 기존 결과 변경, 정책 변경이 필요하면 `/opsx:new`로 전환한다.
+
 Cancel 선택 시 아래 출력 후 중단:
 
 ```
@@ -50,6 +54,7 @@ Cancel 선택 시 아래 출력 후 중단:
 
 openspec/specs/<domain>/spec.md already exists with N requirements.
 
+To elaborate this spec (without changing behavior scope), use /opsx:elaborate-spec <domain>.
 To modify this spec, use /opsx:new <change-name> to create a change
 with delta specs (MODIFIED/ADDED/REMOVED).
 ```
@@ -148,6 +153,7 @@ This spec documents current code behavior. Next steps:
 | Command | Role |
 |---------|------|
 | `/opsx:seed` | 기존 코드에서 초기 spec 생성 (this skill) |
+| `/opsx:elaborate-spec` | 기존 main spec의 requirement/scenario 구체화/상세화 |
 | `/opsx:new` | 변경사항 생성 (spec/code 수정) |
 | `/opsx:verify` | 코드-스펙 일치 검증 |
 | `/opsx:archive` | 변경 완료 + main spec 병합 |
