@@ -157,9 +157,9 @@ After creating/updating the document (before final save), scan each team member'
 - Calculate Jaccard similarity
 - Threshold: **50% or higher** = Add to batch
 
-**User interaction (batch mode with AskUserQuestion):**
+**User interaction (batch mode):**
 
-Use the `AskUserQuestion` tool to present multiple similar pairs at once:
+Present multiple similar pairs to the user at once:
 
 ```
 questions:
@@ -192,7 +192,7 @@ options:
 ```
 
 **Batch processing rules:**
-- Maximum 4 questions per batch (AskUserQuestion limit)
+- Default batch size: 4 questions (adjust based on client capability)
 - If more than 4 similar pairs found, process in multiple batches
 - Each question shows: team member, main item, and both similar sub-items
 - User can see all duplicates at once and make decisions efficiently
@@ -205,7 +205,7 @@ options:
 **Important notes:**
 - Only compares **sub-items** within the same **main item**
 - Does NOT modify or merge main items
-- Processes up to 4 pairs at once using AskUserQuestion tool
+- Process similar pairs in batches sized for the current client capability
 - User has full control over all decisions
 - More efficient UX with tabbed/button interface
 

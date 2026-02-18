@@ -1,0 +1,10 @@
+{
+  "strategies_path": "./strategies",
+  "default_structure": {
+    "required": ["README.md"],
+    "optional": ["rules/", "skills/", "agents/"]
+  },
+  "templates": {
+    "readme": "assets/templates/strategy-readme-template.md"
+  }
+}
