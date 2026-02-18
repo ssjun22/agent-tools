@@ -14,13 +14,13 @@ Automate daily work journal creation by migrating incomplete TODOs, unresolved I
 
 ### Required Tools and Permissions
 
-This skill requires the following Claude Code tools and permissions:
+This skill requires the following tools and permissions:
 
 **Tools:**
 - `Read` - Read yesterday's file and config.json
 - `Write` - Create config.json and today's work log file
 - `Bash` - Execute date_helper.py script and create directories (mkdir)
-- `AskUserQuestion` - Interactive configuration and user confirmations
+- Interactive user prompts (chat or runtime-supported question tool) - Configuration and confirmations
 
 **Permissions needed:**
 - File read access to Obsidian vault directory
@@ -59,10 +59,10 @@ ls config.json
 
 **If config.json does not exist:**
 
-1. Use AskUserQuestion tool to collect configuration:
+1. Ask the user the following configuration questions:
 
 ```
-AskUserQuestion with questions:
+Question template:
 [
   {
     "question": "Obsidian vault의 절대 경로를 입력하세요",
@@ -235,6 +235,8 @@ Parse yesterday's file to extract incomplete TODOs, unresolved Issues, and incom
    - Keep all indentation (spaces/tabs) exactly as written
    - Maintain hierarchical relationships (project → task → sub-task)
    - Keep all nested sub-tasks with their indentation
+   - **Preserve inline formatting exactly as written:** `==highlight==`, `**bold**`, `*italic*`, `<mark>...</mark>` etc.
+   - Do NOT strip or modify any inline markdown syntax within item text
 
 4. **Handle nested TODOs with completed parents:**
    - If parent is `[x]` but has child `[ ]` items: Include entire tree (parent + all children)
@@ -259,7 +261,7 @@ Input (yesterday's file, date = 2026-02-09):
 ## TODOs
 - 프로젝트A
 	- [x] 회의 자료 준비
-	- [ ] 코드 리뷰
+	- [ ] ==코드 리뷰==
 		- [ ] PR #123 리뷰
 		- [x] PR #124 리뷰
 - 프로젝트B
@@ -276,7 +278,7 @@ Input (yesterday's file, date = 2026-02-09):
 Extracted TODOs (to migrate):
 ```markdown
 - 프로젝트A
-	- [ ] 코드 리뷰 (2/9~)
+	- [ ] ==코드 리뷰== (2/9~)
 		- [ ] PR #123 리뷰
 - 프로젝트B
 	- [x] 유형 4,5 에이전트 개발
@@ -294,8 +296,9 @@ Note:
 - `[x] 유형 4,5 에이전트 개발` is included (has unchecked child) but no date added (it's `[x]`)
 - `오늘 할 일을 작성하세요` is excluded (template placeholder)
 - `문서 작성 (2/7~)` preserves existing origin date
+- **`==코드 리뷰==` highlight is preserved exactly** — origin date appended after the closing `==`
 - **Hierarchical date rule applied:** child items under same-dated parents have dates removed
-  - `코드 리뷰 (2/9~)` parent has date, child `PR #123 리뷰` inherits from parent
+  - `==코드 리뷰== (2/9~)` parent has date, child `PR #123 리뷰` inherits from parent
   - `개인 학습 (2/9~)` parent has date, children inherit from parent
 
 **Issues Parsing Rules:**
@@ -407,7 +410,7 @@ Note:
 
 ### Step 5: Display Summary and Get User Confirmation
 
-Display a summary of items to be migrated and use AskUserQuestion for approval.
+Display a summary of items to be migrated and ask for explicit approval.
 
 **First, display the summary:**
 
@@ -449,10 +452,10 @@ Display a summary of items to be migrated and use AskUserQuestion for approval.
 	- [ ] 변경사항이 생긴 케이스 테스트 필요 (2/8~)
 ```
 
-**Then use AskUserQuestion:**
+**Then ask the user:**
 
 ```
-AskUserQuestion with questions:
+Question template:
 [
   {
     "question": "이대로 오늘 파일에 이월할까요?",
@@ -490,12 +493,12 @@ Proceed to Step 7.
 
 **Case B: Directory does not exist (`today.dir_exists = false`)**
 
-1. Use AskUserQuestion for confirmation:
+1. Ask for confirmation:
 
 ```
 Display: "월별 디렉토리가 없습니다: YYYY/M월"
 
-AskUserQuestion with questions:
+Question template:
 [
   {
     "question": "디렉토리를 생성할까요?",
@@ -598,12 +601,12 @@ Write: /absolute/path/Daily Notes/YYYY/M월/YYYY-MM-DD.md
 
 **Handle file conflicts:**
 
-If today's file already exists, use AskUserQuestion:
+If today's file already exists, ask whether to overwrite:
 
 ```
 Display: "⚠️ 오늘 파일(YYYY-MM-DD.md)이 이미 존재합니다."
 
-AskUserQuestion with questions:
+Question template:
 [
   {
     "question": "기존 파일을 덮어쓸까요?",
