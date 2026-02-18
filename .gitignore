@@ -10,3 +10,5 @@ skills/reference
 *.pyc
 skills/shared/task-manager/tasks.md
 .codex
+.DS_Store
+.sync-plans/
