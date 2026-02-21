@@ -541,8 +541,6 @@ Generate today's work log file using Write tool.
 **File structure:**
 
 ```markdown
-# YYYY-MM-DD
-
 ## TODOs
 [migrated TODOs from Step 4, or config.project_sections 기반 project template if no items to migrate]
 
@@ -569,8 +567,7 @@ Use content from `assets/default-template.md` with two replacements:
 
 **If migrating from yesterday**:
 
-1. Start with header: `# {today.date}`
-2. Add TODOs section:
+1. Add TODOs section:
    - If items to migrate: Add migrated TODOs (preserve indentation/structure)
    - If no items: Build project template from `config.project_sections`
      ```markdown
@@ -726,6 +723,20 @@ User: "다시 일지 만들어줘" (after declining migration)
 - Format: Plain URLs (one per line)
 - Migration: Never migrates (always starts empty)
 - Use case: Feed to articles-summarizer skill or other URL processors
+
+**Retrospect Section:**
+- Purpose: End-of-day reflection on what went well and what to improve
+- Format:
+  ```markdown
+  ## Retrospect
+
+  ### Wins
+  -
+
+  ### Improvements
+  -
+  ```
+- Migration: Never migrates (always starts empty)
 
 ## Troubleshooting
 

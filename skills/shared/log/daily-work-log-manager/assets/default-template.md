@@ -1,5 +1,3 @@
-# {DATE}
-
 ## TODOs
 {PROJECT_TODOS}
 
@@ -14,3 +12,11 @@
 
 ## Articles
 - (관심있는 기사 URL을 입력하세요)
+
+## Retrospect
+
+### Wins
+-
+
+### Improvements
+-
