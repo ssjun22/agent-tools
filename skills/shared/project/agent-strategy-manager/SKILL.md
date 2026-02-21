@@ -109,7 +109,70 @@ Optional directories:
   skills/: 1 file(s)
 ```
 
-### 4. Update and Maintain Strategies
+### 4. Apply Strategy to a Repository (Claude Code)
+
+Apply a strategy's `rules/`, `skills/`, and `agents/` files directly into a target project's `.claude/` directory, following Claude Code's standard structure.
+
+**Script:** `scripts/apply_to_repo.py`
+
+**Usage:**
+```bash
+# List configured repo aliases
+python scripts/apply_to_repo.py --list-repos
+
+# Apply to a registered repo alias
+python scripts/apply_to_repo.py <strategy-name> --repo <alias>
+
+# Apply to a specific repo path
+python scripts/apply_to_repo.py <strategy-name> --repo /path/to/project
+
+# Preview changes without writing files (recommended first)
+python scripts/apply_to_repo.py <strategy-name> --repo <alias> --dry-run
+
+# Overwrite existing files
+python scripts/apply_to_repo.py <strategy-name> --repo <alias> --overwrite
+```
+
+**Repo aliases** are configured in `assets/config.local.json` under the `repos` key:
+```json
+{
+  "repos": {
+    "my-project": "/path/to/my-project",
+    "other-project": "/path/to/other-project"
+  }
+}
+```
+
+**What it does:**
+
+| Strategy source   | Copies to                          |
+|-------------------|------------------------------------|
+| `rules/*.md`      | `.claude/rules/`                   |
+| `skills/*/`       | `.claude/skills/`                  |
+| `agents/*.md`     | `.claude/agents/`                  |
+| `hooks/*`         | `.claude/hooks/`                   |
+
+- Creates `.claude/` and subdirectories if they don't exist
+- Skips existing files by default (use `--overwrite` to replace)
+- `--dry-run` shows what would be copied without making changes
+
+**Example:**
+```
+🚀 Applying strategy 'karpathy-skills' to: /path/to/my-project
+
+  📁 Created directory: .claude/rules
+  ✅ Copied: karpathy-skills.md → .claude/rules/karpathy-skills.md
+
+──────────────────────────────────────────────────
+✅ Done!
+   Copied:  1 file(s)
+   Created: 1 directory
+```
+
+**Reference:** See `references/claude-code-structure.md` for details on Claude Code's `.claude/` directory layout.
+
+### 5. Update and Maintain Strategies
+
 
 Modify existing strategies by:
 
@@ -207,16 +270,19 @@ Copy entire strategy directories into project repositories and customize as need
 
 - **list_strategies.py**: List all strategies with metadata
 - **validate_strategy.py**: Validate strategy structure
+- **apply_to_repo.py**: Apply a strategy's files to a target repository's `.claude/` directory
 
 Scripts can be executed directly without loading into context.
 
 ### references/
 
 - **strategy-structure-guide.md**: Comprehensive guide to strategy organization, best practices, and validation criteria
+- **claude-code-structure.md**: Claude Code `.claude/` directory layout and strategy-to-project mapping guide
 
-Load this reference when:
+Load these references when:
 - Creating complex strategies
 - Unsure about structural decisions
+- Applying strategies to Claude Code projects
 - Need detailed examples
 
 ### assets/
