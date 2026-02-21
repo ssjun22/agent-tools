@@ -11,8 +11,9 @@ Analyze staged changes and generate a Korean commit message following convention
 
 1. Run `scripts/show-staged.sh` (or `git diff --staged`) to review changes
 2. Identify the appropriate type
-3. Write a Korean summary (under 50 characters)
-4. Add a bullet-point body in Korean if needed (max 3 lines)
+3. If staged changes span multiple types (e.g., `chore` + `docs`, `feat` + `refactor`), consider splitting into separate commits — but ask the user first before proceeding
+4. Write a Korean summary (under 50 characters)
+5. Add a bullet-point body in Korean if needed (max 3 lines)
 
 ## Commit Message Format
 
@@ -51,6 +52,7 @@ Analyze staged changes and generate a Korean commit message following convention
 - [ ] bullet point 사용, 마침표 없음
 - [ ] 본문 최대 3줄
 - [ ] Co-Authored-By 없음
+- [ ] 여러 type이 혼재하면 커밋 분리 여부를 사용자에게 확인
 
 ## References
 
