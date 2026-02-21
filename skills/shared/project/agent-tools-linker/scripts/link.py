@@ -1,21 +1,14 @@
 #!/usr/bin/env python3
 """
-Link agent-tools artifacts (strategies, skills, hooks, agents, rules)
-into a target repository's .claude/ directory via symlinks or copies.
+Link agent-tools skills and agents into a target repository's .claude/ directory
+via symlinks or copies.
 
 Usage:
-    # Apply a full strategy
-    python link.py strategy <strategy-name> --repo <alias|path>
-
-    # Link an individual artifact
     python link.py skill <skill-name> --repo <alias|path>
-    python link.py hook <hook-file> --repo <alias|path>
-    python link.py agent <agent-file> --repo <alias|path>
-    python link.py rule <rule-file> --repo <alias|path>
+    python link.py agent <agent-name> --repo <alias|path>
 
     # Utilities
     python link.py --list-repos
-    python link.py --list-strategies
 
 Options:
     --repo      Target repo alias or absolute path
@@ -35,20 +28,10 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).parent.parent
 AGENT_TOOLS_ROOT = Path("/Users/choiyoungjun/agent-tools")
 
-# strategy subdir -> .claude/ subdir
-STRATEGY_DIR_MAP = {
-    "rules": "rules",
-    "skills": "skills",
-    "agents": "agents",
-    "hooks": "hooks",
-}
-
 # artifact type -> (source base dir, .claude/ target dir)
 ARTIFACT_MAP = {
-    "skill":  (AGENT_TOOLS_ROOT / "skills" / "shared", "skills"),
-    "hook":   (AGENT_TOOLS_ROOT / ".claude" / "hooks", "hooks"),
-    "agent":  (AGENT_TOOLS_ROOT / ".claude" / "agents", "agents"),
-    "rule":   (AGENT_TOOLS_ROOT / ".claude" / "rules", "rules"),
+    "skill": (AGENT_TOOLS_ROOT / "skills" / "shared", "skills"),
+    "agent": (AGENT_TOOLS_ROOT / "agents" / "shared", "agents"),
 }
 
 
@@ -63,12 +46,6 @@ def load_config() -> dict:
 
 def get_repos(config: dict) -> dict:
     return config.get("repos", {})
-
-
-def get_strategies_dir(config: dict) -> Path:
-    raw = config.get("strategies_path", str(AGENT_TOOLS_ROOT / "strategies"))
-    path = Path(raw)
-    return path if path.is_absolute() else (SKILL_ROOT / path).resolve()
 
 
 def resolve_repo(raw: str, repos: dict) -> Path:
@@ -99,39 +76,6 @@ def link_file(source: Path, target: Path, *, dry_run: bool, overwrite: bool, sym
     return "linked" if symlink else "copied"
 
 
-def apply_strategy(strategy_path: Path, claude_dir: Path, *, dry_run: bool, overwrite: bool, symlink: bool, verbose: bool):
-    applied = skipped = created_dirs = 0
-
-    for src_dir, tgt_dir in STRATEGY_DIR_MAP.items():
-        src_base = strategy_path / src_dir
-        if not src_base.exists():
-            continue
-
-        files = [f for f in src_base.rglob("*") if f.is_file()]
-        for src_file in files:
-            rel = src_file.relative_to(src_base)
-            tgt_file = claude_dir / tgt_dir / rel
-
-            if not tgt_file.parent.exists() and not dry_run:
-                tgt_file.parent.mkdir(parents=True, exist_ok=True)
-                created_dirs += 1
-                print(f"  📁 Created: {tgt_file.parent}")
-
-            result = link_file(src_file, tgt_file, dry_run=dry_run, overwrite=overwrite, symlink=symlink)
-
-            if result == "skipped":
-                skipped += 1
-                if verbose:
-                    print(f"  ⏭️  Skipped: {tgt_file}")
-            else:
-                applied += 1
-                icon = "🔗" if symlink else "✅"
-                verb = f"[dry-run] Would {'symlink' if symlink else 'copy'}" if dry_run else ("Symlinked" if symlink else "Copied")
-                print(f"  {icon} {verb}: {src_file.name} → {tgt_file}")
-
-    return applied, skipped, created_dirs
-
-
 def find_skill(name: str, skills_base: Path) -> Path | None:
     """skills/shared/<category>/<name> 구조에서 스킬 디렉토리를 탐색한다."""
     # 직접 경로
@@ -156,14 +100,12 @@ def apply_artifact(artifact_type: str, name: str, claude_dir: Path, *, dry_run: 
             print(f"❌ skill '{name}' not found in: {src_base} (카테고리 하위 포함)")
             sys.exit(1)
     else:
+        # agent: agents/shared/<name>.md 또는 agents/shared/<name>/
         src = src_base / name
         if not src.exists():
-            # 확장자 없이 입력한 경우 시도
-            for ext in [".md", ".sh", ".py"]:
-                candidate = src_base / (name + ext)
-                if candidate.exists():
-                    src = candidate
-                    break
+            candidate = src_base / (name + ".md")
+            if candidate.exists():
+                src = candidate
 
     if not src.exists():
         print(f"❌ {artifact_type} '{name}' not found in: {src_base}")
@@ -218,7 +160,7 @@ def main():
     parser.add_argument(
         "type",
         nargs="?",
-        choices=["strategy", "skill", "hook", "agent", "rule"],
+        choices=["skill", "agent"],
         help="Artifact type to link",
     )
     parser.add_argument("name", nargs="?", help="Artifact name")
@@ -228,7 +170,6 @@ def main():
     parser.add_argument("--copy", action="store_true", help="Copy instead of symlink")
     parser.add_argument("--verbose", action="store_true", help="Detailed output")
     parser.add_argument("--list-repos", action="store_true", help="List configured repo aliases")
-    parser.add_argument("--list-strategies", action="store_true", help="List available strategies")
     args = parser.parse_args()
 
     config = load_config()
@@ -245,20 +186,9 @@ def main():
                 print(f"  {ok} {alias}: {path}")
         sys.exit(0)
 
-    if args.list_strategies:
-        strategies_dir = get_strategies_dir(config)
-        if not strategies_dir.exists():
-            print(f"❌ Strategies directory not found: {strategies_dir}")
-            sys.exit(1)
-        items = sorted(d.name for d in strategies_dir.iterdir() if d.is_dir())
-        print(f"Available strategies ({len(items)}):")
-        for name in items:
-            print(f"  📁 {name}")
-        sys.exit(0)
-
     # ── Validate args ──
     if not args.type:
-        parser.error("artifact type is required (strategy | skill | hook | agent | rule)")
+        parser.error("artifact type is required (skill | agent)")
     if not args.name:
         parser.error(f"name is required for type '{args.type}'")
 
@@ -285,23 +215,11 @@ def main():
         claude_dir.mkdir(parents=True)
         print(f"  📁 Created .claude/ directory")
 
-    if args.type == "strategy":
-        strategies_dir = get_strategies_dir(config)
-        strategy_path = strategies_dir / args.name
-        if not strategy_path.exists():
-            print(f"❌ Strategy '{args.name}' not found at: {strategy_path}")
-            sys.exit(1)
-        applied, skipped, created_dirs = apply_strategy(
-            strategy_path, claude_dir,
-            dry_run=args.dry_run, overwrite=args.overwrite,
-            symlink=use_symlink, verbose=args.verbose,
-        )
-    else:
-        applied, skipped, created_dirs = apply_artifact(
-            args.type, args.name, claude_dir,
-            dry_run=args.dry_run, overwrite=args.overwrite,
-            symlink=use_symlink, verbose=args.verbose,
-        )
+    applied, skipped, created_dirs = apply_artifact(
+        args.type, args.name, claude_dir,
+        dry_run=args.dry_run, overwrite=args.overwrite,
+        symlink=use_symlink, verbose=args.verbose,
+    )
 
     print()
     print("─" * 50)
