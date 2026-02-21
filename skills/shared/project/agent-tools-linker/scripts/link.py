@@ -132,18 +132,38 @@ def apply_strategy(strategy_path: Path, claude_dir: Path, *, dry_run: bool, over
     return applied, skipped, created_dirs
 
 
+def find_skill(name: str, skills_base: Path) -> Path | None:
+    """skills/shared/<category>/<name> 구조에서 스킬 디렉토리를 탐색한다."""
+    # 직접 경로
+    direct = skills_base / name
+    if direct.exists():
+        return direct
+    # 카테고리 하위 탐색
+    for category in skills_base.iterdir():
+        if category.is_dir():
+            candidate = category / name
+            if candidate.exists():
+                return candidate
+    return None
+
+
 def apply_artifact(artifact_type: str, name: str, claude_dir: Path, *, dry_run: bool, overwrite: bool, symlink: bool, verbose: bool):
     src_base, tgt_dir = ARTIFACT_MAP[artifact_type]
 
-    # Support both file and directory (e.g. skill directories)
-    src = src_base / name
-    if not src.exists():
-        # Try with common extensions
-        for ext in [".md", ".sh", ".py"]:
-            candidate = src_base / (name + ext)
-            if candidate.exists():
-                src = candidate
-                break
+    if artifact_type == "skill":
+        src = find_skill(name, src_base)
+        if src is None:
+            print(f"❌ skill '{name}' not found in: {src_base} (카테고리 하위 포함)")
+            sys.exit(1)
+    else:
+        src = src_base / name
+        if not src.exists():
+            # 확장자 없이 입력한 경우 시도
+            for ext in [".md", ".sh", ".py"]:
+                candidate = src_base / (name + ext)
+                if candidate.exists():
+                    src = candidate
+                    break
 
     if not src.exists():
         print(f"❌ {artifact_type} '{name}' not found in: {src_base}")
