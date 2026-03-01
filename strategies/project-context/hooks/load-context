@@ -2,48 +2,63 @@
 #
 # Claude Code SessionStart hook — project-context strategy
 #
-# 세션 시작 시 .claude/context/index.md를 읽어 AI에게 프로젝트 컨텍스트를 주입한다.
+# 세션 시작 시 컨텍스트 파일 위치와 현재 할 일을 AI에게 주입한다.
+# - 파일 경로와 성격은 항상 전달
+# - 진행 중 항목이 있으면 그것만, 없으면 진행 예정 첫 번째 항목 전달
 #
 # Install: .claude/settings.local.json 에 추가
 # {
 #   "hooks": {
-#     "SessionStart": [{ "hooks": [{ "type": "command", "command": "bash .claude/hooks/load-context" }] }]
+#     "SessionStart": "bash .claude/hooks/load-context"
 #   }
 # }
 #
 
 CONTEXT_DIR=".claude/context"
-INDEX_FILE="$CONTEXT_DIR/index.md"
+PROJECT_FILE="$CONTEXT_DIR/project.md"
+STATUS_FILE="$CONTEXT_DIR/status.md"
 
 # context/ 디렉토리가 없으면 이 전략을 사용하지 않는 프로젝트 — 조용히 skip
 if [ ! -d "$CONTEXT_DIR" ]; then
     exit 0
 fi
 
-# index.md가 없으면 초기화 안내
-if [ ! -f "$INDEX_FILE" ]; then
-    echo ""
-    echo "⚠️  .claude/context/index.md 가 없습니다."
-    echo "    /project-context-init 스킬로 초기화하세요."
-    echo ""
+# project.md가 없으면 초기화 안내 후 종료
+if [ ! -f "$PROJECT_FILE" ]; then
+    echo "⚠️  .claude/context/project.md 가 없습니다. /project-context-init 스킬로 초기화하세요."
     exit 0
 fi
 
-echo ""
-echo "=== 프로젝트 컨텍스트 로드 ==="
-echo ""
+# 파일 위치와 성격 안내
+echo "[프로젝트 컨텍스트]"
+echo "파일: $PROJECT_FILE — 프로젝트 목적, 도메인, 아키텍처 결정"
+echo "파일: $STATUS_FILE — 작업 상태 목록 (진행 중/예정/완료)"
 
-cat << 'EOF'
-🤖 AI 지시사항:
+# status.md가 없으면 여기서 종료
+if [ ! -f "$STATUS_FILE" ]; then
+    exit 0
+fi
 
-.claude/context/index.md 를 읽고 사용자에게 다음 형식으로 요약하세요:
-
-[컨텍스트 로드됨]
-프로젝트: {프로젝트명} — {목적 한 줄}
-진행 중: {진행 중인 작업 한 줄}
-
-상세 정보가 필요하면 project.md 또는 status.md 를 참조하세요.
-EOF
+# 진행 중 항목 추출
+in_progress=$(awk '/^### 진행 중/{f=1;next} /^###/{f=0} f && /\S/' "$STATUS_FILE")
 
 echo ""
+if [ -n "$in_progress" ] && ! echo "$in_progress" | grep -qx "(없음)"; then
+    echo "[지금 할 일]"
+    echo "$in_progress"
+else
+    # 진행 예정 첫 번째 항목 추출
+    upcoming=$(awk '
+        /^### 진행 예정/{f=1;next}
+        /^###/{if(f)exit}
+        f && /^[0-9]+\./{if(found)exit; found=1}
+        f && found
+    ' "$STATUS_FILE")
+
+    if [ -n "$upcoming" ]; then
+        echo "[다음 할 일]"
+        echo "$upcoming"
+    fi
+fi
+
 exit 0

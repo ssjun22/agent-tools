@@ -16,9 +16,9 @@
 
 ## Core Principles
 
-1. **Lazy Loading** — `index.md`만 자동 로드, 상세 파일은 AI가 필요 시 참조
+1. **직접 로드** — `project.md`와 `status.md`를 세션 시작 시 직접 로드
 2. **정적/동적 분리** — `project.md`(정적)와 `status.md`(동적)를 분리
-3. **명시적 업데이트** — 자동 갱신 대신 `/project-context-update` 스킬로 직접 호출
+3. **명시적 업데이트** — 자동 갱신 대신 `/project-context-manager` 스킬로 직접 호출
 4. **CLAUDE.md와 역할 구분** — CLAUDE.md는 "규칙", context/는 "상태 정보"
 
 ## File Structure
@@ -32,9 +32,7 @@ strategies/project-context/
 ├── rules/
 │   └── project-context.md            # AI 동작 규칙 (CLAUDE.md에 추가)
 ├── hooks/
-│   └── load-context                  # SessionStart: index.md 주입
-├── context/                          # 프로젝트에 복사해서 사용하는 초기 파일
-│   └── index.md
+│   └── load-context                  # SessionStart: project.md + status.md 주입
 └── skills/
     ├── project-context-init/
     │   └── SKILL.md                  # context/ 초기화 스킬
@@ -51,20 +49,15 @@ strategies/project-context/
 .claude/
 ├── CLAUDE.md                         # 프로젝트 규칙/컨벤션 (기존)
 └── context/
-    ├── index.md                      # 진입점 — hook이 자동 로드
     ├── project.md                    # 정적: 프로젝트 개요, 도메인, 아키텍처 결정
     └── status.md                     # 동적: 작업 상태 목록
 ```
 
 ## Context Files
 
-### `index.md` — 진입점
-
-세션 시작 시 자동 로드. 각 파일의 한 줄 요약만 포함.
-
 ### `project.md` — 정적 정보
 
-`/project-context-update` 로 수동 업데이트.
+`/project-context-manager` 로 수동 업데이트.
 
 - 프로젝트 목적 및 배경
 - 현재 상태 (단계, 규모, 환경)
@@ -73,7 +66,7 @@ strategies/project-context/
 
 ### `status.md` — 동적 정보
 
-`/project-context-update` 로 수동 업데이트.
+`/project-context-manager` 로 수동 업데이트.
 
 - 진행 중 / 진행 예정 / 진행 완료 목록
 
@@ -81,14 +74,14 @@ strategies/project-context/
 
 | Hook 파일 | 이벤트 | 동작 |
 |-----------|--------|------|
-| `load-context` | SessionStart | `context/index.md` 읽어서 AI에게 주입 |
+| `load-context` | SessionStart | `context/project.md` + `context/status.md` 읽어서 AI에게 주입 |
 
 ## Skills
 
 | 스킬 | 용도 |
 |------|------|
 | `/project-context-init` | 새 프로젝트에 context/ 구조 초기화 |
-| `/project-context-manager` | project.md / status.md 업데이트 후 index.md 동기화 |
+| `/project-context-manager` | project.md / status.md 업데이트 |
 
 ## Installation
 
@@ -100,8 +93,8 @@ chmod +x .claude/hooks/load-context
 # 2. rules 추가
 cat strategies/project-context/rules/project-context.md >> .claude/CLAUDE.md
 
-# 3. context/ 초기화
-cp -r strategies/project-context/context .claude/context
+# 3. context/ 초기화 (스킬로 실행)
+# /project-context-init
 
 # 4. settings.local.json 등록
 cp strategies/project-context/settings.json .claude/settings.local.json

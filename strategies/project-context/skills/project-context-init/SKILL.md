@@ -1,7 +1,6 @@
 ---
 name: project-context-init
-description: 현재 프로젝트에 .claude/context/ 구조를 초기화한다. index.md, project.md, status.md를 템플릿 기반으로 생성하고 hooks 설치를 안내한다.
-usage: /project-context-init
+description: 현재 프로젝트에 .claude/context/ 구조를 초기화한다. project.md, status.md를 템플릿 기반으로 생성하고 hooks 설치를 안내한다.
 ---
 
 # Project Context Init
@@ -16,9 +15,8 @@ usage: /project-context-init
    - 이미 있으면 덮어쓰기 전에 사용자에게 확인
 
 2. 다음 파일을 생성한다:
-   - `.claude/context/index.md` — `strategies/project-context/context/index.md` 복사
-   - `.claude/context/project.md` — `strategies/project-context/skills/project-context-update/references/project-template.md` 복사
-   - `.claude/context/status.md` — `strategies/project-context/skills/project-context-update/references/status-template.md` 복사
+   - `.claude/context/project.md` — `references/project-template.md` 기반으로 생성
+   - `.claude/context/status.md` — `references/status-template.md` 기반으로 생성
 
 3. 사용자에게 안내:
    ```
@@ -27,7 +25,6 @@ usage: /project-context-init
    채워야 할 파일:
    - project.md: 목적, Breaking Changes, 도메인, 외부 링크
    - status.md: 현재 업무 목록
-   - index.md: project/status 한 줄 요약 (작성 후 업데이트)
 
    hooks 미설치 시:
    - agent-tools/strategies/project-context/hooks/load-context → .claude/hooks/ 복사
