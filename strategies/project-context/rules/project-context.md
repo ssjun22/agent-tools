@@ -7,9 +7,13 @@
 
 | 파일 | 성격 | 갱신 주체 |
 |------|------|-----------|
+| `context/index.md` | 파일 맵 — 각 파일의 역할과 참조 시점 | `/project-context-manager` (파일 추가 시) |
 | `context/project.md` | 정적 — 프로젝트 개요, 도메인, 아키텍처 결정 | `/project-context-manager` |
 | `context/status.md` | 동적 — 작업 상태 목록 | `/project-context-manager` |
+| `context/refs/` | 독립 참조 문서 — 필요 시 AI가 직접 읽음 | 수동 추가 |
 | `context/drafts/` | 대화 중 감지된 변경사항 임시 저장 | 자동 생성 |
+
+`context/index.md`는 세션 시작에 자동 주입되지 않는다. 참조 문서가 필요한 상황에서 AI가 직접 읽어 활용한다.
 
 `context/`는 상태 정보, `CLAUDE.md`는 규칙/지침 — 역할을 혼용하지 않습니다.
 

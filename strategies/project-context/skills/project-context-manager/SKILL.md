@@ -22,6 +22,7 @@ description: 작업 완료, 세션 종료, 프로젝트 상태 변경 시 프로
 ### 2. 현재 파일 읽기
 
 다음 파일을 읽어 현재 상태를 파악한다:
+- `.claude/context/index.md` — 파일 맵 (존재하는 경우)
 - `.claude/context/project.md`
 - `.claude/context/status.md`
 - `.claude/context/drafts/` — pending 상태의 draft 파일 전체
@@ -77,6 +78,8 @@ draft에서 온 항목은 `[draft]` 태그를 붙여 출처를 구분한다.
 
 확인된 변경사항을 파일에 반영한다.
 포맷은 `references/project-template.md`, `references/status-template.md` 를 참조한다.
+
+`refs/` 에 새 파일이 추가된 경우 `index.md`의 "참조 문서" 테이블도 함께 업데이트한다.
 
 ### 6. Draft 정리
 
