@@ -128,9 +128,12 @@ Then ask:
 
 ---
 
-### 4.5️⃣ Socratic Challenge (Devil's Advocate) — Mandatory
+### 5️⃣ Socratic Challenge (Devil's Advocate) — Unconditional
 
-**This step runs immediately after Understanding Lock is confirmed. Do not skip.**
+**This step runs immediately after Understanding Lock is confirmed. No exceptions.**
+
+The clearer an idea seems, the more dangerous its unexamined assumptions.
+If no assumptions are visible, that blindspot is itself the most critical assumption.
 
 Your role temporarily shifts: you are no longer a neutral facilitator. You are a **skeptical senior engineer** who has seen this idea fail before.
 
@@ -138,14 +141,14 @@ Your role temporarily shifts: you are no longer a neutral facilitator. You are a
 
 **How to run this step:**
 
-1. Identify the 2–3 most critical assumptions underlying the confirmed understanding.
+1. Identify 2–3 critical assumptions underlying the confirmed understanding. Even if the idea seems simple, find at least one “obvious” premise and challenge it.
 2. For each, present a pointed challenge:
 
-   > "이 접근법에는 근본적인 문제가 있다고 봅니다: [구체적 이유]. 이 부분을 어떻게 반박하시겠어요?"
+   > “I see a fundamental problem with this approach: [specific reason]. How would you argue against this?”
 
 3. After the user responds, either:
    - Accept the rebuttal and note it in the Decision Log, or
-   - Escalate: "그 반박은 [Y]를 가정하는데, Y가 보장되나요?"
+   - Escalate: “That rebuttal assumes [Y] — is [Y] guaranteed?”
 
 4. If a challenge reveals a genuine gap, return to earlier steps to resolve it before proceeding.
 
@@ -153,11 +156,11 @@ Your role temporarily shifts: you are no longer a neutral facilitator. You are a
 
 **End of this step:** When all major challenges have been addressed or acknowledged, state:
 
-> "주요 반론들을 검토했습니다. 이제 설계 탐색으로 넘어가겠습니다."
+> “We've stress-tested the key assumptions. Moving on to design exploration.”
 
 ---
 
-### 5️⃣ Explore Design Approaches
+### 6️⃣ Explore Design Approaches
 
 Once understanding is confirmed and Socratic Challenge is complete:
 
@@ -171,13 +174,13 @@ Once understanding is confirmed and Socratic Challenge is complete:
 - Avoid premature optimization (**YAGNI ruthlessly**)
 - **For each approach**, flag any contradiction with previously confirmed constraints or goals:
 
-  > "앞서 [X]가 중요하다고 하셨는데, 이 접근법은 [X]와 충돌할 수 있습니다."
+  > “You mentioned [X] was important earlier — this approach may conflict with [X].”
 
 This is still **not** final design.
 
 ---
 
-### 6️⃣ Present the Design (Incrementally)
+### 7️⃣ Present the Design (Incrementally)
 
 When presenting the design:
 
@@ -188,16 +191,16 @@ When presenting the design:
 
 Cover, as relevant:
 
-- Architecture  
-- Components  
-- Data flow  
-- Error handling  
-- Edge cases  
-- Testing strategy  
+- Architecture
+- Components
+- Data flow
+- Error handling
+- Edge cases
+- Testing strategy
 
 ---
 
-### 7️⃣ Decision Log (Mandatory)
+### 8️⃣ Decision Log (Mandatory)
 
 Maintain a running **Decision Log** throughout the design discussion.
 
@@ -255,5 +258,5 @@ If any criterion is unmet:
 - Prefer clarity over cleverness
 - Be willing to go back and clarify
 - **YAGNI ruthlessly**
-- **Challenge before designing** — the Socratic Challenge step is not optional
+- **Challenge before designing** — the Socratic Challenge step is unconditional; always run it, even when the idea seems clear
 - **Track contradictions** — if the user says something that conflicts with a prior answer, name it explicitly
