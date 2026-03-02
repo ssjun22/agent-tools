@@ -68,11 +68,19 @@ Your goal here is **shared clarity**, not speed.
 
 Focus on understanding:
 
-- purpose  
-- target users  
-- constraints  
-- success criteria  
-- explicit non-goals  
+- purpose
+- target users
+- constraints
+- success criteria
+- explicit non-goals
+
+**Assumption Probing (Socratic Layer):**
+
+After receiving a significant answer, consider whether it rests on an unstated assumption. If so, surface it:
+
+> "그렇게 하시려는 전제가 [X]인 것 같은데, 그 전제가 성립하지 않는다면 방향이 달라질까요?"
+
+Do this selectively — not after every answer, only when the assumption is load-bearing.
 
 ---
 
@@ -120,9 +128,38 @@ Then ask:
 
 ---
 
+### 4.5️⃣ Socratic Challenge (Devil's Advocate) — Mandatory
+
+**This step runs immediately after Understanding Lock is confirmed. Do not skip.**
+
+Your role temporarily shifts: you are no longer a neutral facilitator. You are a **skeptical senior engineer** who has seen this idea fail before.
+
+**Goal:** Surface the strongest objections *before* design begins, so the design can address them — not ignore them.
+
+**How to run this step:**
+
+1. Identify the 2–3 most critical assumptions underlying the confirmed understanding.
+2. For each, present a pointed challenge:
+
+   > "이 접근법에는 근본적인 문제가 있다고 봅니다: [구체적 이유]. 이 부분을 어떻게 반박하시겠어요?"
+
+3. After the user responds, either:
+   - Accept the rebuttal and note it in the Decision Log, or
+   - Escalate: "그 반박은 [Y]를 가정하는데, Y가 보장되나요?"
+
+4. If a challenge reveals a genuine gap, return to earlier steps to resolve it before proceeding.
+
+**Tone:** Direct but constructive. Not adversarial. The goal is to pressure-test, not to win.
+
+**End of this step:** When all major challenges have been addressed or acknowledged, state:
+
+> "주요 반론들을 검토했습니다. 이제 설계 탐색으로 넘어가겠습니다."
+
+---
+
 ### 5️⃣ Explore Design Approaches
 
-Once understanding is confirmed:
+Once understanding is confirmed and Socratic Challenge is complete:
 
 - Propose **2–3 viable approaches**
 - Lead with your **recommended option**
@@ -132,6 +169,9 @@ Once understanding is confirmed:
   - risk
   - maintenance
 - Avoid premature optimization (**YAGNI ruthlessly**)
+- **For each approach**, flag any contradiction with previously confirmed constraints or goals:
+
+  > "앞서 [X]가 중요하다고 하셨는데, 이 접근법은 [X]와 충돌할 수 있습니다."
 
 This is still **not** final design.
 
@@ -172,31 +212,21 @@ This log should be preserved for documentation.
 
 ## After the Design
 
-### 📄 Documentation
+### 🛠️ Implementation Handoff
 
-Once the design is validated:
+Once all Exit Criteria are met, ask the user how to proceed:
 
-- Write the final design to a durable, shared format (e.g. Markdown)
-- Include:
-  - Understanding summary
-  - Assumptions
-  - Decision log
-  - Final design
+> “설계가 확정되었습니다. 다음 중 어떻게 진행할까요?
+> 1. 바로 구현 시작
+> 2. 스펙 문서 먼저 작성 (예: openspec 스킬 활용)”
 
-Persist the document according to the project’s standard workflow.
+If implementing directly:
+- Break down the design into concrete implementation steps
+- Proceed incrementally, one step at a time
 
----
-
-### 🛠️ Implementation Handoff (Optional)
-
-Only after documentation is complete, ask:
-
-> “Ready to set up for implementation?”
-
-If yes:
-- Create an explicit implementation plan
-- Isolate work if the workflow supports it
-- Proceed incrementally
+If documenting first:
+- Consider using the `openspec` skill to formalize the spec
+- Then proceed to implementation
 
 ---
 
@@ -218,13 +248,12 @@ If any criterion is unmet:
 
 ## Key Principles (Non-Negotiable)
 
-- One question at a time  
-- Assumptions must be explicit  
-- Explore alternatives  
-- Validate incrementally  
-- Prefer clarity over cleverness  
-- Be willing to go back and clarify  
+- One question at a time
+- Assumptions must be explicit
+- Explore alternatives
+- Validate incrementally
+- Prefer clarity over cleverness
+- Be willing to go back and clarify
 - **YAGNI ruthlessly**
-
----
-If the design is high-impact, high-risk, or requires elevated confidence, you MUST hand off the finalized design and Decision Log to the `multi-agent-brainstorming` skill before implementation.
+- **Challenge before designing** — the Socratic Challenge step is not optional
+- **Track contradictions** — if the user says something that conflicts with a prior answer, name it explicitly
