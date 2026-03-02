@@ -24,6 +24,7 @@ description: 작업 완료, 세션 종료, 프로젝트 상태 변경 시 프로
 다음 파일을 읽어 현재 상태를 파악한다:
 - `.claude/context/project.md`
 - `.claude/context/status.md`
+- `.claude/context/drafts/` — pending 상태의 draft 파일 전체
 
 ### 3. 업데이트 대상 확인
 
@@ -38,14 +39,16 @@ description: 작업 완료, 세션 종료, 프로젝트 상태 변경 시 프로
 ### 4. 변경사항 추론 및 확인
 
 다음 소스를 참조해 변경사항을 추론한다:
+- `.claude/context/drafts/`의 pending draft 파일
 - 세션 대화 맥락
 - `git diff HEAD` 실행 결과 (git 저장소인 경우 — 아니면 대화 맥락만 사용)
 
 변경된 내용을 항목별 delta 형태로 제시한다. 항목 내용(메모 등)도 함께 표시한다.
+draft에서 온 항목은 `[draft]` 태그를 붙여 출처를 구분한다.
 
 ```
 [변경사항 — project.md]
-- Breaking Changes 추가: {추가할 내용}
+- [draft] Breaking Changes 추가: {추가할 내용}
 - 목적 수정: {변경 전} → {변경 후}
 
 이대로 반영할까요? 수정이 필요하면 말씀해 주세요.
@@ -53,9 +56,9 @@ description: 작업 완료, 세션 종료, 프로젝트 상태 변경 시 프로
 
 ```
 [변경사항 — status.md]
-- 진행 중 → 진행 완료: {항목명}
+- [draft] 진행 예정 → 진행 중: {항목명}
   메모: {항목 내용}
-- 진행 예정 → 진행 중: {항목명}
+- 진행 중 → 진행 완료: {항목명}
   메모: {항목 내용}
 - 신규 추가 (진행 예정): {항목명}
 
@@ -75,9 +78,14 @@ description: 작업 완료, 세션 종료, 프로젝트 상태 변경 시 프로
 확인된 변경사항을 파일에 반영한다.
 포맷은 `references/project-template.md`, `references/status-template.md` 를 참조한다.
 
-### 6. 완료 안내
+### 6. Draft 정리
+
+반영된 draft 파일의 `status`를 `pending` → `applied`로 업데이트한다.
+
+### 7. 완료 안내
 
 ```
 컨텍스트 업데이트 완료.
 수정된 파일: {수정된 파일 목록}
+반영된 draft: {적용된 draft 파일 목록 또는 "없음"}
 ```
