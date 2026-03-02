@@ -17,6 +17,17 @@
 
 `context/`는 상태 정보, `CLAUDE.md`는 규칙/지침 — 역할을 혼용하지 않습니다.
 
+## 컨텍스트 업데이트 유도
+
+다음 작업이 완료되면 사용자에게 `/project-context-manager` 실행을 제안한다:
+
+- openspec 스킬 작업 완료 (스펙 작성, 변경, 검토 등)
+- 작업 상태 변경이 있었던 세션 종료 시점
+
+```
+컨텍스트 업데이트가 필요할 수 있습니다. /project-context-manager 를 실행하시겠어요?
+```
+
 ## Draft 자동 생성
 
 대화 중 다음 중 하나가 감지되면 `.claude/context/drafts/`에 draft 파일을 생성한다:
