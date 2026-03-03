@@ -2,7 +2,7 @@
 {PROJECT_TODOS}
 
 ## Meetings
-- (회의 내용을 기록하세요)
+{PROJECT_MEETINGS}
 
 ## Issues
 - [ ] (발생한 이슈를 기록하세요)

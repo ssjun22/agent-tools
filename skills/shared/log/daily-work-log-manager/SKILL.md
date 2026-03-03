@@ -10,7 +10,7 @@ allowed-tools: Read, Write, Bash
 
 Automate daily work journal creation by migrating incomplete TODOs, unresolved Issues, and incomplete Notes from yesterday's file to today's file in Obsidian vault. Transform manual daily note-taking into a streamlined workflow that preserves task continuity across days.
 
-**Important:** This skill operates on Obsidian vault files with a specific directory structure: `Daily Notes/YYYY/M월/YYYY-MM-DD.md`
+**Important:** This skill operates on Obsidian vault files with a specific directory structure: `Daily Notes/YYYY/M월/N주차/YYYY-MM-DD.md`
 
 ### Required Tools and Permissions
 
@@ -149,13 +149,18 @@ python scripts/date_helper.py
 {
   "today": {
     "date": "2026-02-10",
-    "path": "/absolute/path/Daily Notes/2026/2월/2026-02-10.md",
-    "dir": "/absolute/path/Daily Notes/2026/2월",
+    "path": "/absolute/path/Daily Notes/2026/2월/2주차/2026-02-10.md",
+    "dir": "/absolute/path/Daily Notes/2026/2월/2주차",
     "dir_exists": true
   },
   "yesterday": {
     "date": "2026-02-09",
-    "path": "/absolute/path/Daily Notes/2026/2월/2026-02-09.md",
+    "path": "/absolute/path/Daily Notes/2026/2월/2주차/2026-02-09.md",
+    "exists": true
+  },
+  "recent": {
+    "date": "2026-02-07",
+    "path": "/absolute/path/Daily Notes/2026/2월/1주차/2026-02-07.md",
     "exists": true
   },
   "config": {
@@ -172,6 +177,9 @@ python scripts/date_helper.py
 - `yesterday.date`: Yesterday's date string
 - `yesterday.path`: Full path to yesterday's file
 - `yesterday.exists`: Boolean indicating if yesterday's file exists
+- `recent.date`: Most recent daily note date (excluding today)
+- `recent.path`: Full path to most recent daily note
+- `recent.exists`: Boolean indicating if any previous file exists
 - `config.project_sections`: TODO 기본 프로젝트 섹션 목록
 
 **Handle script errors:**
@@ -196,12 +204,19 @@ Proceed to Step 4 for parsing.
 
 **Case B: Yesterday's file does not exist (`yesterday.exists = false`)**
 
-Display message:
-```
-"어제 파일이 없습니다. 기본 템플릿을 사용합니다."
-```
+Check `recent.exists` from Step 2:
 
-Skip to Step 7 (directory check) and use `assets/default-template.md` as the base template.
+- `recent.exists = true`: Display message and use the most recent file instead:
+  ```
+  "어제 파일이 없습니다. 가장 최근 파일(YYYY-MM-DD)을 기반으로 이월합니다."
+  ```
+  Use Read tool to load `recent.path` and proceed to Step 4 for parsing (treating it as "yesterday's file").
+
+- `recent.exists = false`: Display message and use default template:
+  ```
+  "이전 파일이 없습니다. 기본 템플릿을 사용합니다."
+  ```
+  Skip to Step 7 (directory check) and use `assets/default-template.md` as the base template.
 
 **Handle edge cases:**
 - File permissions: If Read fails due to permissions, display error
@@ -254,9 +269,20 @@ Parse yesterday's file to extract incomplete TODOs, unresolved Issues, and incom
 
 8. **Add origin date:** Apply Origin Date Tracking Rule to all `- [ ]` items
 
+9. **Backlog classification:** After applying origin dates, classify each `[ ]` item by age:
+   - Origin date가 오늘 기준 **7일 이상** 경과된 항목 → **Backlogs**로 분류
+   - Origin date가 7일 미만인 항목 → **TODOs**에 유지
+   - 날짜 계산: `(M/D~)` 형식에서 날짜를 파싱. 연도는 오늘 날짜 기준으로 추론 (예: 오늘이 2월이면 1~2월은 올해, 12월은 작년)
+   - **트리 단위로 이동:** 부모 `[ ]` 항목이 backlog로 분류되면 해당 항목의 모든 자식도 함께 이동
+   - **프로젝트 헤더 처리:**
+     - 프로젝트 하위 항목 일부만 backlog → 헤더를 TODOs와 Backlogs 양쪽에 분리하여 표시
+     - 프로젝트 하위 항목 전부 backlog → 헤더를 Backlogs에만 표시
+   - `[x]` 항목(완료된 부모)은 분류 대상이 아님. 단, 미완료 자식이 있으면 자식의 날짜 기준으로 분류
+   - origin date가 없는 항목은 backlog로 분류하지 않음 (날짜 추론 불가)
+
 **Example parsing:**
 
-Input (yesterday's file, date = 2026-02-09):
+Input (recent file, date = 2026-02-09, today = 2026-02-17):
 ```markdown
 ## TODOs
 - 프로젝트A
@@ -275,31 +301,36 @@ Input (yesterday's file, date = 2026-02-09):
 	- [ ] 오늘 할 일을 작성하세요
 ```
 
-Extracted TODOs (to migrate):
+Extracted TODOs (after origin date + backlog classification, today = 2026-02-17):
 ```markdown
-- 프로젝트A
-	- [ ] ==코드 리뷰== (2/9~)
-		- [ ] PR #123 리뷰
+## TODOs
 - 프로젝트B
 	- [x] 유형 4,5 에이전트 개발
 		- [ ] 테스트 구조 잡아야지 않을까? (2/9~)
 - 기타
-	- [ ] 문서 작성 (2/7~)
 	- [ ] 개인 학습 (2/9~)
 		- [ ] React 19 튜토리얼
 		- [ ] 성능 최적화 아티클 읽기
+
+## Backlogs
+- 프로젝트A
+	- [ ] ==코드 리뷰== (2/9~)
+		- [ ] PR #123 리뷰
+- 기타
+	- [ ] 문서 작성 (2/7~)
 ```
 
 Note:
-- `프로젝트A` header is included (has unchecked children)
 - `[x] 회의 자료 준비` is excluded (fully completed, no children)
-- `[x] 유형 4,5 에이전트 개발` is included (has unchecked child) but no date added (it's `[x]`)
 - `오늘 할 일을 작성하세요` is excluded (template placeholder)
-- `문서 작성 (2/7~)` preserves existing origin date
-- **`==코드 리뷰==` highlight is preserved exactly** — origin date appended after the closing `==`
+- **`==코드 리뷰== (2/9~)`** — 2/9~는 오늘(2/17) 기준 8일 경과 → Backlogs로 이동
+- **`문서 작성 (2/7~)`** — 2/7~는 오늘 기준 10일 경과 → Backlogs로 이동
+- **`테스트 구조 잡아야지 않을까? (2/9~)`** — 부모가 `[x]`이므로 부모 날짜 없음, 자식(2/9~)이 8일 경과지만 부모가 `[x]`인 경우 자식의 날짜 기준 적용 → Backlogs 대신 TODOs 유지 (부모 컨텍스트 보존 목적)
+- **`개인 학습 (2/9~)`** — 자식들에 origin date 없음(상속), 부모 날짜(2/9~) 8일 경과지만 날짜가 없는 항목은 backlog 분류 대상 아님 → TODOs 유지
 - **Hierarchical date rule applied:** child items under same-dated parents have dates removed
   - `==코드 리뷰== (2/9~)` parent has date, child `PR #123 리뷰` inherits from parent
   - `개인 학습 (2/9~)` parent has date, children inherit from parent
+- **Backlog 프로젝트 헤더:** `프로젝트A`의 모든 미완료 항목이 backlog → 헤더가 Backlogs에만 표시. `기타`는 항목이 분산되어 TODOs와 Backlogs 양쪽에 헤더 표시
 
 **Issues Parsing Rules:**
 
@@ -408,11 +439,9 @@ Note:
 - Do NOT parse or migrate Articles section
 - Articles section always starts empty in today's file
 
-### Step 5: Display Summary and Get User Confirmation
+### Step 5: Display Migration Summary
 
-Display a summary of items to be migrated and ask for explicit approval.
-
-**First, display the summary:**
+이월할 항목 요약을 출력하고, 사용자 확인 없이 바로 Step 6으로 진행한다.
 
 ```
 📋 어제(YYYY-MM-DD)에서 이월할 항목:
@@ -420,68 +449,15 @@ Display a summary of items to be migrated and ask for explicit approval.
 ## TODOs (N개)
 [display extracted TODOs with full structure]
 
+## Backlogs (N개) ← 7일 이상 미해결 항목
+[display extracted Backlogs]
+
 ## Issues (N개)
 [display extracted Issues]
 
 ## Notes (N개)
 [display extracted Notes with [ ] items and parent context]
 ```
-
-**Example summary:**
-
-```
-📋 어제(2026-02-09)에서 이월할 항목:
-
-## TODOs (5개)
-- 프로젝트A
-	- [ ] 코드 리뷰 (2/9~)
-		- [ ] PR #123 리뷰 (2/9~)
-- 기타
-	- [ ] 문서 작성 (2/7~)
-	- [ ] 개인 학습 (2/9~)
-		- [ ] React 19 튜토리얼 (2/9~)
-		- [ ] 성능 최적화 아티클 읽기 (2/9~)
-
-## Issues (2개)
-- [ ] [프로젝트A] 데이터베이스 연결 타임아웃 (2/9~)
-- [ ] API 응답 느림 (2/8~)
-
-## Notes (2개)
-- openspec 기반 SDD 전략 정리중
-	- [ ] spec 정리 구현중 (seed) (2/9~)
-	- [ ] 변경사항이 생긴 케이스 테스트 필요 (2/8~)
-```
-
-**Then ask the user:**
-
-```
-Question template:
-[
-  {
-    "question": "이대로 오늘 파일에 이월할까요?",
-    "header": "Migration",
-    "options": [
-      {
-        "label": "예, 이월합니다",
-        "description": "위 항목들을 오늘 파일로 이월"
-      },
-      {
-        "label": "아니오, 수정이 필요합니다",
-        "description": "어제 파일을 먼저 수정하고 다시 실행"
-      }
-    ],
-    "multiSelect": false
-  }
-]
-```
-
-**User response handling:**
-
-- User selects "예, 이월합니다": Proceed to Step 6
-- User selects "아니오, 수정이 필요합니다": Display message and exit:
-  ```
-  "어제 파일을 수정한 후 다시 실행하세요."
-  ```
 
 ### Step 6: Check and Create Directory
 
@@ -520,7 +496,7 @@ Question template:
 
 2. If user selects "예, 생성합니다":
    ```bash
-   mkdir -p "/absolute/path/Daily Notes/YYYY/M월"
+   mkdir -p "/absolute/path/Daily Notes/YYYY/M월/N주차"
    ```
 
 3. Confirm creation:
@@ -555,15 +531,37 @@ Generate today's work log file using Write tool.
 
 ## Articles
 - (관심있는 기사 URL을 입력하세요)
+
+## Retrospect
+
+### Wins
+-
+
+### Improvements
+-
+
+## Backlogs
+[migrated Backlogs from Step 4, or omit entire section if no items]
 ```
 
 **If using default template** (no yesterday file):
 
-Use content from `assets/default-template.md` with two replacements:
+Use content from `assets/default-template.md` with three replacements:
 - `{DATE}` → `today.date`
 - `{PROJECT_TODOS}` → `config.project_sections`를 아래 형식으로 렌더링한 문자열
   - 형식: `프로젝트명` 줄 다음 `- [ ] (오늘 할 일을 작성하세요)`
   - 각 프로젝트 블록 사이에 빈 줄 1개 추가
+- `{PROJECT_MEETINGS}` → `config.project_sections`를 아래 형식으로 렌더링한 문자열 (`기타` 제외)
+  - 형식: `- 프로젝트명` 줄 다음 들여쓰기로 `- (회의 내용을 기록하세요)`
+  - 각 프로젝트 블록 사이에 빈 줄 1개 추가
+  - 예시:
+    ```
+    - 글렌즈
+    	- (회의 내용을 기록하세요)
+
+    - 차이홍
+    	- (회의 내용을 기록하세요)
+    ```
 
 **If migrating from yesterday**:
 
@@ -588,11 +586,24 @@ Use content from `assets/default-template.md` with two replacements:
    - If `[ ]` items to migrate: Add migrated Notes (with parent context)
    - If no items: Add placeholder: `- (자유롭게 메모를 작성하세요)`
 6. Add Articles section with placeholder: `## Articles\n- (관심있는 기사 URL을 입력하세요)\n\n`
+7. Add Retrospect section:
+   ```markdown
+   ## Retrospect
+
+   ### Wins
+   -
+
+   ### Improvements
+   -
+   ```
+8. Add Backlogs section (always last):
+   - If backlog items exist: Add migrated Backlogs
+   - If no backlog items: **Omit the entire section** (do not add placeholder)
 
 **Write the file:**
 
 ```bash
-Write: /absolute/path/Daily Notes/YYYY/M월/YYYY-MM-DD.md
+Write: /absolute/path/Daily Notes/YYYY/M월/N주차/YYYY-MM-DD.md
 [content as structured above]
 ```
 
@@ -633,10 +644,11 @@ After successfully creating today's file, display completion message:
 ```
 ✅ 오늘 업무 일지가 생성되었습니다!
 
-📂 파일 위치: Daily Notes/YYYY/M월/YYYY-MM-DD.md
+📂 파일 위치: Daily Notes/YYYY/M월/N주차/YYYY-MM-DD.md
 
 📋 이월된 항목:
 - TODOs: N개
+- Backlogs: N개 (7일 이상 미해결)
 - Issues: N개
 - Notes: N개
 
@@ -648,7 +660,7 @@ Obsidian에서 파일을 열어 작업을 시작하세요.
 ```
 ✅ 오늘 업무 일지가 생성되었습니다!
 
-📂 파일 위치: Daily Notes/YYYY/M월/YYYY-MM-DD.md
+📂 파일 위치: Daily Notes/YYYY/M월/N주차/YYYY-MM-DD.md
 
 기본 템플릿이 적용되었습니다. Obsidian에서 파일을 열어 작업을 시작하세요.
 ```
