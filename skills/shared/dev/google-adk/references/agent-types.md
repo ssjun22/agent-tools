@@ -63,11 +63,14 @@ instruction이 길어질 경우 역할별로 파일로 분리하여 관리할 �
 agents/my_agent/
 ├── agent.py
 └── prompt_parts/
-    ├── 1_role.md         # 에이전트 역할 정의
-    ├── 2_io.md           # 입출력 형식
-    ├── 3_constraints.md  # 제약 조건
-    └── 4_examples.md     # Few-shot 예시
+    ├── 1_role.md           # 에이전트 역할 정의
+    ├── 2_io.md             # 입출력 형식
+    ├── 3_requirements.md   # 검사/판단 기준 목록 (검사 항목이 많을 때 constraints와 분리)
+    ├── 4_constraints.md    # 판단 행동 제약 (근거 없이 오류 판정 금지 등)
+    └── 5_examples.md       # Few-shot 예시
 ```
+
+검사 항목이 단순하거나 적은 경우 `3_requirements.md`를 생략하고 `3_constraints.md`에 통합할 수 있다.
 
 ```python
 # agent.py
@@ -78,7 +81,7 @@ def _load_prompt(filename: str) -> str:
     return path.read_text(encoding="utf-8")
 
 def get_instruction() -> str:
-    parts = ["1_role.md", "2_io.md", "3_constraints.md", "4_examples.md"]
+    parts = ["1_role.md", "2_io.md", "3_requirements.md", "4_constraints.md", "5_examples.md"]
     return "\n\n".join(_load_prompt(p) for p in parts)
 
 agent = LlmAgent(

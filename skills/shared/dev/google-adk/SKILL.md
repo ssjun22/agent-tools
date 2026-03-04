@@ -26,13 +26,13 @@ pip install google-adk
 
 필요한 주제의 레퍼런스를 로드하여 참조하라.
 
-| 파일 | 내용 |
-|------|------|
-| `references/agent-types.md` | LlmAgent, SequentialAgent, ParallelAgent, LoopAgent 정의 및 파라미터 |
-| `references/tools.md` | 커스텀 툴 작성 원칙, Built-in 툴 목록, 주의사항 |
-| `references/orchestration.md` | 멀티 에이전트 패턴 선택 가이드 및 구현 예시 |
-| `references/model-config.md` | temperature, thinking mode, max_output_tokens 설정 |
-| `references/session.md` | 세션/메모리 개념 및 기본 사용법 |
+| 파일                          | 내용                                                                 |
+| ----------------------------- | -------------------------------------------------------------------- |
+| `references/agent-types.md`   | LlmAgent, SequentialAgent, ParallelAgent, LoopAgent 정의 및 파라미터 |
+| `references/tools.md`         | 커스텀 툴 작성 원칙, Built-in 툴 목록, 주의사항                      |
+| `references/orchestration.md` | 멀티 에이전트 패턴 선택 가이드 및 구현 예시                          |
+| `references/model-config.md`  | temperature, thinking mode, max_output_tokens 설정                   |
+| `references/session.md`       | 세션/메모리 개념 및 기본 사용법                                      |
 
 ---
 
@@ -40,13 +40,13 @@ pip install google-adk
 
 `assets/` 디렉토리의 파일을 프로젝트에 복사하여 시작점으로 사용하라.
 
-| 파일 | 설명 |
-|------|------|
-| `assets/single_agent.py` | 단일 LlmAgent 기본 구조 |
-| `assets/sequential_pipeline.py` | SequentialAgent 파이프라인 |
-| `assets/parallel_pipeline.py` | ParallelAgent + SequentialAgent 조합 |
-| `assets/custom_tool.py` | 커스텀 툴 정의 (함수형 + 비동기 API) |
-| `assets/runner_setup.py` | Runner + Session 초기화 및 실행 |
+| 파일                            | 설명                                 |
+| ------------------------------- | ------------------------------------ |
+| `assets/single_agent.py`        | 단일 LlmAgent 기본 구조              |
+| `assets/sequential_pipeline.py` | SequentialAgent 파이프라인           |
+| `assets/parallel_pipeline.py`   | ParallelAgent + SequentialAgent 조합 |
+| `assets/custom_tool.py`         | 커스텀 툴 정의 (함수형 + 비동기 API) |
+| `assets/runner_setup.py`        | Runner + Session 초기화 및 실행      |
 
 ---
 
