@@ -1,23 +1,26 @@
 """
-Agent Runner + Session 초기화 skeleton.
+Runner + Session 초기화 skeleton 코드를 지정한 경로에 생성한다.
 
-에이전트를 실행하기 위한 기본 설정.
-agent 변수에 실제 에이전트(또는 루트 에이전트)를 연결하여 사용하라.
+사용법:
+    python scripts/runner_setup.py --output <생성할 파일 경로>
 
-사용 예:
-    from single_agent import agent  # 또는 pipeline, root_agent 등
-    # 아래 코드에서 agent 변수를 교체한다.
+예시:
+    python scripts/runner_setup.py --output ./agents/my_agent/runner.py
 """
 
+import argparse
+from pathlib import Path
+
+TEMPLATE = '''\
 import asyncio
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 # 실행할 에이전트를 import하여 교체하라
-# from single_agent import agent
-# from sequential_pipeline import pipeline as agent
-# from parallel_pipeline import root_agent as agent
+# from agent import agent
+# from agent import pipeline as agent
+# from agent import root_agent as agent
 
 
 async def run_agent(user_message: str, agent, session_id: str = "session_001") -> str:
@@ -33,7 +36,7 @@ async def run_agent(user_message: str, agent, session_id: str = "session_001") -
         에이전트의 최종 응답 텍스트
     """
     session_service = InMemorySessionService()
-    session = session_service.create_session(
+    session_service.create_session(
         app_name="my_app",
         user_id="user_001",
         session_id=session_id,
@@ -65,7 +68,24 @@ async def run_agent(user_message: str, agent, session_id: str = "session_001") -
 
 
 if __name__ == "__main__":
-    # 사용 예시 (agent를 위에서 import한 에이전트로 교체하라)
+    # 사용 예시
+    # from agent import agent
     # result = asyncio.run(run_agent("안녕하세요, 도움이 필요합니다.", agent))
     # print(result)
     pass
+'''
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Runner + Session 초기화 skeleton 생성")
+    parser.add_argument("--output", required=True, help="생성할 파일 경로 (예: ./agents/my_agent/runner.py)")
+    args = parser.parse_args()
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(TEMPLATE, encoding="utf-8")
+    print(f"생성 완료: {output_path}")
+
+
+if __name__ == "__main__":
+    main()

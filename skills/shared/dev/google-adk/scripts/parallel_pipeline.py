@@ -1,10 +1,19 @@
 """
-ParallelAgent + SequentialAgent 조합 skeleton.
+ParallelAgent + SequentialAgent 조합 skeleton 코드를 지정한 경로에 생성한다.
 
-독립적인 작업을 병렬로 수행한 후, 결과를 종합하는 패턴.
-병렬로 실행될 에이전트들과 종합 에이전트를 목적에 맞게 수정하라.
+독립적인 작업을 병렬로 수행한 후 결과를 종합하는 패턴.
+
+사용법:
+    python scripts/parallel_pipeline.py --output <생성할 파일 경로>
+
+예시:
+    python scripts/parallel_pipeline.py --output ./agents/parallel/agent.py
 """
 
+import argparse
+from pathlib import Path
+
+TEMPLATE = '''\
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
 from google.genai import types
 
@@ -65,3 +74,19 @@ root_agent = SequentialAgent(
     name="parallel_then_synthesize",
     sub_agents=[parallel_gather, synthesize_agent],
 )
+'''
+
+
+def main():
+    parser = argparse.ArgumentParser(description="ParallelAgent + SequentialAgent 조합 skeleton 생성")
+    parser.add_argument("--output", required=True, help="생성할 파일 경로 (예: ./agents/parallel/agent.py)")
+    args = parser.parse_args()
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(TEMPLATE, encoding="utf-8")
+    print(f"생성 완료: {output_path}")
+
+
+if __name__ == "__main__":
+    main()

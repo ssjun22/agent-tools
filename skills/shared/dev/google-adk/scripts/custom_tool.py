@@ -1,13 +1,28 @@
 """
-커스텀 툴 정의 패턴 skeleton.
+커스텀 툴 skeleton 코드를 지정한 경로에 생성한다.
 
 두 가지 패턴을 포함한다:
-1. 함수형 툴 (동기)
-2. 외부 API 연동 툴 (비동기)
+- 함수형 툴 (동기)
+- 외부 API 연동 툴 (비동기)
 
-목적에 맞게 수정하고 에이전트의 tools 리스트에 추가하라.
+툴 작성 시 주의사항:
+- 독스트링의 Args, Returns를 반드시 명시하라 — LLM이 툴을 올바르게 사용하는 데 직결된다
+- 반환값은 직렬화 가능한 타입 (dict, list, str, int 등)으로 반환하라
+- 에러 발생 시 예외를 raise하지 말고 에러 정보를 dict로 반환하는 것을 고려하라
+- 비동기 API 호출은 async def로 정의하라
+- 민감한 정보(API Key 등)는 환경변수로 관리하라
+
+사용법:
+    python scripts/custom_tool.py --output <생성할 파일 경로>
+
+예시:
+    python scripts/custom_tool.py --output ./agents/my_agent/tools.py
 """
 
+import argparse
+from pathlib import Path
+
+TEMPLATE = '''\
 import httpx
 import os
 
@@ -62,14 +77,19 @@ async def call_external_api(query: str, max_results: int = 5) -> list[dict]:
         data = response.json()
 
     return data.get("items", [])
+'''
 
 
-# 에이전트에 등록할 때:
-# from google.adk.agents import LlmAgent
-#
-# agent = LlmAgent(
-#     name="my_agent",
-#     model="gemini-2.5-flash",
-#     instruction="...",
-#     tools=[process_data, call_external_api],
-# )
+def main():
+    parser = argparse.ArgumentParser(description="커스텀 툴 skeleton 생성")
+    parser.add_argument("--output", required=True, help="생성할 파일 경로 (예: ./agents/my_agent/tools.py)")
+    args = parser.parse_args()
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(TEMPLATE, encoding="utf-8")
+    print(f"생성 완료: {output_path}")
+
+
+if __name__ == "__main__":
+    main()

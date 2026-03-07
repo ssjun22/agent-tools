@@ -1,10 +1,17 @@
 """
-SequentialAgent 파이프라인 skeleton.
+SequentialAgent 파이프라인 skeleton 코드를 지정한 경로에 생성한다.
 
-각 에이전트의 output_key 결과가 다음 에이전트의 instruction에서 참조된다.
-단계 수와 역할을 목적에 맞게 수정하라.
+사용법:
+    python scripts/sequential_pipeline.py --output <생성할 파일 경로>
+
+예시:
+    python scripts/sequential_pipeline.py --output ./agents/pipeline/agent.py
 """
 
+import argparse
+from pathlib import Path
+
+TEMPLATE = '''\
 from google.adk.agents import LlmAgent, SequentialAgent
 from google.genai import types
 
@@ -59,3 +66,19 @@ pipeline = SequentialAgent(
     name="my_pipeline",
     sub_agents=[step1_agent, step2_agent, step3_agent],
 )
+'''
+
+
+def main():
+    parser = argparse.ArgumentParser(description="SequentialAgent 파이프라인 skeleton 생성")
+    parser.add_argument("--output", required=True, help="생성할 파일 경로 (예: ./agents/pipeline/agent.py)")
+    args = parser.parse_args()
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(TEMPLATE, encoding="utf-8")
+    print(f"생성 완료: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
