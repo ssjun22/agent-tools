@@ -1,5 +1,5 @@
 {
-  "strategies_path": "/Users/username/agent-tools/strategies",
+  "plugins_path": "/Users/username/agent-tools/plugins",
   "repos": {
     "프로젝트-a": "/path/to/project-a",
     "프로젝트-b": "/path/to/project-b"

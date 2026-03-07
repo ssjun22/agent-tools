@@ -1,0 +1,10 @@
+{
+  "plugins_path": "./plugins",
+  "default_structure": {
+    "required": ["README.md"],
+    "optional": ["rules/", "skills/", "agents/"]
+  },
+  "templates": {
+    "readme": "assets/templates/plugin-readme-template.md"
+  }
+}

@@ -6,7 +6,7 @@ via symlinks or copies.
 Usage:
     python link.py skill <skill-name> --repo <alias|path>
     python link.py agent <agent-name> --repo <alias|path>
-    python link.py strategy <strategy-name> --repo <alias|path>
+    python link.py plugin <plugin-name> --repo <alias|path>
 
     # Utilities
     python link.py --list-repos
@@ -33,7 +33,7 @@ AGENT_TOOLS_ROOT = Path("/Users/choiyoungjun/agent-tools")
 ARTIFACT_MAP = {
     "skill": (AGENT_TOOLS_ROOT / "skills" / "shared", "skills"),
     "agent": (AGENT_TOOLS_ROOT / "agents" / "shared", "agents"),
-    "strategy": (AGENT_TOOLS_ROOT / "strategies", None),  # target dir varies per component
+    "plugin": (AGENT_TOOLS_ROOT / "plugins", None),  # target dir varies per component
 }
 
 
@@ -93,15 +93,15 @@ def find_skill(name: str, skills_base: Path) -> Path | None:
     return None
 
 
-def apply_strategy(name: str, claude_dir: Path, *, dry_run: bool, overwrite: bool, symlink: bool, verbose: bool):
-    """strategies/<name>/skills/ 하위 스킬들을 .claude/skills/에 링크한다."""
-    strategies_base = AGENT_TOOLS_ROOT / "strategies"
-    strategy_dir = strategies_base / name
-    if not strategy_dir.exists():
-        print(f"❌ strategy '{name}' not found in: {strategies_base}")
+def apply_plugin(name: str, claude_dir: Path, *, dry_run: bool, overwrite: bool, symlink: bool, verbose: bool):
+    """plugins/<name>/skills/ 하위 스킬들을 .claude/skills/에 링크한다."""
+    plugins_base = AGENT_TOOLS_ROOT / "plugins"
+    plugin_dir = plugins_base / name
+    if not plugin_dir.exists():
+        print(f"❌ plugin '{name}' not found in: {plugins_base}")
         sys.exit(1)
 
-    skills_dir = strategy_dir / "skills"
+    skills_dir = plugin_dir / "skills"
     if not skills_dir.exists() or not any(skills_dir.iterdir()):
         print(f"  ⚠️  No skills found in: {skills_dir}")
         return 0, 0, 0
@@ -138,8 +138,8 @@ def apply_strategy(name: str, claude_dir: Path, *, dry_run: bool, overwrite: boo
 def apply_artifact(artifact_type: str, name: str, claude_dir: Path, *, dry_run: bool, overwrite: bool, symlink: bool, verbose: bool):
     src_base, tgt_dir = ARTIFACT_MAP[artifact_type]
 
-    if artifact_type == "strategy":
-        return apply_strategy(name, claude_dir, dry_run=dry_run, overwrite=overwrite, symlink=symlink, verbose=verbose)
+    if artifact_type == "plugin":
+        return apply_plugin(name, claude_dir, dry_run=dry_run, overwrite=overwrite, symlink=symlink, verbose=verbose)
 
     if artifact_type == "skill":
         src = find_skill(name, src_base)
@@ -207,7 +207,7 @@ def main():
     parser.add_argument(
         "type",
         nargs="?",
-        choices=["skill", "agent", "strategy"],
+        choices=["skill", "agent", "plugin"],
         help="Artifact type to link",
     )
     parser.add_argument("name", nargs="?", help="Artifact name")
