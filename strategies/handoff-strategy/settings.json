@@ -1,7 +1,0 @@
-{
-  "hooks": {
-    "SessionStart": "bash .claude/hooks/session-start",
-    "SessionEnd": "bash .claude/hooks/session-end",
-    "PreCompact": "bash .claude/hooks/pre-compact"
-  }
-}
