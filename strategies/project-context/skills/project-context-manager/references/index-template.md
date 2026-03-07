@@ -1,13 +1,1 @@
-# Context Index
-
-## 핵심 파일
-
-| 파일 | 내용 | 참조 시점 |
-|------|------|-----------|
-| `project.md` | 프로젝트 목적, 도메인, 아키텍처 결정 | 프로젝트 배경, 기술 결정 이유가 필요할 때 |
-| `status.md` | 작업 상태 목록 (진행 중/예정/완료) | 현재 할 일, 진행 상황 확인이 필요할 때 |
-
-## 참조 문서 (refs/)
-
-| 파일 | 내용 | 참조 시점 |
-|------|------|-----------|
+/Users/choiyoungjun/agent-tools/strategies/project-context/skills/project-context-manager/references/index-template.md

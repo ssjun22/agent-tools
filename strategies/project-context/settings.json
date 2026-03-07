@@ -1,5 +1,6 @@
 {
   "hooks": {
-    "SessionStart": "bash .claude/hooks/load-context"
+    "SessionStart": "bash .claude/hooks/load-context",
+    "SessionEnd": "bash .claude/hooks/save-context"
   }
 }

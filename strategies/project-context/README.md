@@ -75,6 +75,7 @@ strategies/project-context/
 | Hook 파일 | 이벤트 | 동작 |
 |-----------|--------|------|
 | `load-context` | SessionStart | `context/project.md` + `context/status.md` 읽어서 AI에게 주입 |
+| `save-context` | SessionEnd | 세션 중 발생한 변경사항이 draft로 저장됐는지 더블체크. 누락된 항목은 `context/drafts/`에 생성하도록 AI에게 지시 |
 
 ## Skills
 
@@ -88,7 +89,8 @@ strategies/project-context/
 ```bash
 # 1. hooks 복사
 cp strategies/project-context/hooks/load-context .claude/hooks/
-chmod +x .claude/hooks/load-context
+cp strategies/project-context/hooks/save-context .claude/hooks/
+chmod +x .claude/hooks/load-context .claude/hooks/save-context
 
 # 2. rules 추가
 cat strategies/project-context/rules/project-context.md >> .claude/CLAUDE.md
