@@ -1,6 +1,6 @@
 ---
 name: git-commit-helper
-description: "This skill should be used when the user wants to create a Git commit message. Analyzes staged changes and generates a commit message in 'type: 한글 설명' format. Triggered when the user asks for a commit message, wants to review staged changes, or needs help with conventional commits in Korean."
+description: "This skill should be used when the user wants to commit code changes. Analyzes staged changes and generates a commit message in 'type: 한글 설명' format. Triggered when the user asks to commit (e.g., '커밋해줘', '방금 작업 커밋해줘', 'commit this'), asks for a commit message, wants to review staged changes, or needs help with conventional commits in Korean."
 ---
 
 # Git Commit Helper
@@ -9,11 +9,18 @@ Analyze staged changes and generate a Korean commit message following convention
 
 ## Workflow
 
-1. Run `scripts/show-staged.sh` (or `git diff --staged`) to review changes
-2. Identify the appropriate type
-3. If staged changes span multiple types (e.g., `chore` + `docs`, `feat` + `refactor`), consider splitting into separate commits — but ask the user first before proceeding
-4. Write a Korean summary (under 50 characters)
-5. Add a bullet-point body in Korean if needed (max 3 lines)
+1. Run `git status` to see all changes (staged, unstaged, untracked)
+2. Run `git diff --staged` (or `scripts/show-staged.sh`) to review staged contents in detail
+3. If there are unstaged or untracked files relevant to the task, stage them with `git add <files>` before proceeding
+4. Identify the appropriate type
+5. If staged changes span multiple types (e.g., `chore` + `docs`, `feat` + `refactor`), consider splitting into separate commits — but ask the user first before proceeding
+6. **If splitting commits:**
+   - Run `git restore --staged .` to unstage everything
+   - Stage only the files for the first commit with `git add <files>`
+   - Run `git diff --staged` to verify staged contents before committing
+   - Commit, then repeat for the next commit
+7. Write a Korean summary (under 50 characters)
+8. Add a bullet-point body in Korean if needed (max 3 lines)
 
 ## Commit Message Format
 
@@ -53,6 +60,7 @@ Analyze staged changes and generate a Korean commit message following convention
 - [ ] 본문 최대 3줄
 - [ ] Co-Authored-By 없음
 - [ ] 여러 type이 혼재하면 커밋 분리 여부를 사용자에게 확인
+- [ ] 커밋 분리 시, 커밋 직전 `git diff --staged`로 스테이징 내용 재확인
 
 ## References
 

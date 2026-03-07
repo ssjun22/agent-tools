@@ -135,12 +135,29 @@ At this point, it is time to actually create the skill.
 
 Skip this step only if the skill being developed already exists, and iteration or packaging is needed. In this case, continue to the next step.
 
-When creating a new skill from scratch, always run the `init_skill.py` script. The script conveniently generates a new template skill directory that automatically includes everything a skill requires, making the skill creation process much more efficient and reliable.
+Determine the output path based on the skill's category:
+
+| 카테고리 | 경로 | 대상 |
+|---------|------|------|
+| 개발/코드/테스트 | `skills/shared/dev/` | 코드 리뷰, API 연동, 커밋 등 |
+| 일지/로그/회의 | `skills/shared/log/` | 작업 로그, 보고서, 회의록 등 |
+| 스킬 개발/메타 | `skills/shared/meta/` | 스킬 생성, 피드백, 설정 동기화 등 |
+| 계획/문서 작성 | `skills/shared/planning/` | 브레인스토밍, 문서, 계획 등 |
+| 프로젝트 관리 | `skills/shared/project/` | Jira, 전략, 작업 관리 등 |
+| 디자인 | `skills/shared/design/` | UI/UX, 디자인 시스템 등 |
+
+When creating a new skill from scratch, always run the `init_skill.py` script to generate a template skill directory.
 
 Usage:
 
 ```bash
 scripts/init_skill.py <skill-name> --path <output-directory>
+```
+
+Example:
+
+```bash
+scripts/init_skill.py code-reviewer --path skills/shared/dev
 ```
 
 The script:

@@ -200,48 +200,14 @@ Cover, as relevant:
 
 ---
 
-### 8️⃣ Decision Log (Mandatory)
-
-Maintain a running **Decision Log** throughout the design discussion.
-
-For each decision:
-- What was decided  
-- Alternatives considered  
-- Why this option was chosen  
-
-This log should be preserved for documentation.
-
----
-
-## After the Design
-
-### 🛠️ Implementation Handoff
-
-Once all Exit Criteria are met, ask the user how to proceed:
-
-> “설계가 확정되었습니다. 다음 중 어떻게 진행할까요?
-> 1. 바로 구현 시작
-> 2. 스펙 문서 먼저 작성 (예: openspec 스킬 활용)”
-
-If implementing directly:
-- Break down the design into concrete implementation steps
-- Proceed incrementally, one step at a time
-
-If documenting first:
-- Consider using the `openspec` skill to formalize the spec
-- Then proceed to implementation
-
----
-
 ## Exit Criteria (Hard Stop Conditions)
 
 You may exit brainstorming mode **only when all of the following are true**:
 
-- Understanding Lock has been confirmed  
-- At least one design approach is explicitly accepted  
-- Major assumptions are documented  
-- Key risks are acknowledged  
-- Decision Log is complete  
+- Understanding Lock has been confirmed
+- At least one design approach is explicitly accepted
+- Major assumptions are documented
+- Key risks are acknowledged
 
 If any criterion is unmet:
 - Continue refinement  
@@ -260,3 +226,9 @@ If any criterion is unmet:
 - **YAGNI ruthlessly**
 - **Challenge before designing** — the Socratic Challenge step is unconditional; always run it, even when the idea seems clear
 - **Track contradictions** — if the user says something that conflicts with a prior answer, name it explicitly
+
+## Non-Goals
+
+- 코드 작성 또는 구현 — 이 스킬이 활성화된 동안 구현 불가
+- 스펙 문서 작성 — 설계 확정 후 별도 작업으로 위임
+- 테스트 작성, 리팩터링 등 구현 수반 작업 일체
