@@ -13,6 +13,7 @@ Output:
 """
 
 import json
+import math
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -89,16 +90,34 @@ def get_daily_paths(config_path="config.json"):
     today = datetime.now()
     yesterday = today - timedelta(days=1)
 
-    # Korean month format
+    # Korean month/week format
     today_month_kr = f"{today.month}월"
     yesterday_month_kr = f"{yesterday.month}월"
+    today_week_kr = f"{math.ceil(today.day / 7)}주차"
+    yesterday_week_kr = f"{math.ceil(yesterday.day / 7)}주차"
 
-    # Generate file paths
-    today_dir = vault_path / daily_notes / str(today.year) / today_month_kr
-    yesterday_dir = vault_path / daily_notes / str(yesterday.year) / yesterday_month_kr
+    # Generate file paths (YYYY/M월/N주차/YYYY-MM-DD.md)
+    today_dir = vault_path / daily_notes / str(today.year) / today_month_kr / today_week_kr
+    yesterday_dir = vault_path / daily_notes / str(yesterday.year) / yesterday_month_kr / yesterday_week_kr
 
     today_path = today_dir / f"{today.strftime('%Y-%m-%d')}.md"
     yesterday_path = yesterday_dir / f"{yesterday.strftime('%Y-%m-%d')}.md"
+
+    # Find most recent daily note file (excluding today)
+    recent_file = None
+    recent_date = None
+    daily_notes_root = vault_path / daily_notes
+    if daily_notes_root.exists():
+        for md_file in sorted(daily_notes_root.rglob("*.md"), reverse=True):
+            stem = md_file.stem
+            try:
+                file_date = datetime.strptime(stem, "%Y-%m-%d")
+                if file_date.date() < today.date():
+                    recent_file = str(md_file)
+                    recent_date = stem
+                    break
+            except ValueError:
+                continue
 
     return {
         "today": {
@@ -111,6 +130,11 @@ def get_daily_paths(config_path="config.json"):
             "date": yesterday.strftime("%Y-%m-%d"),
             "path": str(yesterday_path),
             "exists": yesterday_path.exists()
+        },
+        "recent": {
+            "date": recent_date,
+            "path": recent_file,
+            "exists": recent_file is not None
         },
         "config": {
             "project_sections": project_sections
