@@ -84,7 +84,7 @@ The skill automatically determines:
 1. Read existing document
 2. For each team member found in Slack text:
    - Find their section in the document
-   - **Filter out personal items**: 오전 반차, 오후 반차, 휴가, 병가 등
+   - **Filter out personal items**: 오전 반차, 오후 반차, 휴가, 병가, 코드 페어, 미팅 등
 3. Parse work items with **main-sub item structure**:
 
    **Match with main items:**
@@ -93,14 +93,20 @@ The skill automatically determines:
      2. If match found → prepare to add as sub-item
      3. If no match → prepare to add under "기타"
 
+   **카테고리 헤더 병합:**
+   - Slack 입력에서 카테고리 헤더(예: `* 서비스A`)로 묶인 하위 항목들이 있을 때:
+     1. 문서에 동일한 접두어를 가진 기존 항목(예: `서비스A 배포 대응`)이 있으면, 카테고리의 하위 항목들을 해당 기존 항목의 sub-item으로 병합
+     2. 기존 항목이 없으면 카테고리 헤더 자체를 새 main item으로 추가하고 하위 항목들을 sub-item으로 배치
+   - 이 규칙은 어제 한 일/오늘 할 일 등 서로 다른 섹션 간에도 적용
+
    **sub-item 계층화 조건:**
    - 해당 main item을 달성하기 위해 수행한 구체적인 하위 작업일 때만 계층화
    - 단순히 같은 프로젝트에 속하거나 키워드가 유사하다는 이유만으로 계층화하지 않는다
    - 관계가 불명확한 경우 동일 레벨로 배치
 
-   **Indentation:**
-   - Main items: no indent (`- 기술 스택 조사`)
-   - Sub-items: tab (`	- API 문서 읽기`)
+   **Indentation & Formatting:**
+   - Main items (한 주 요약): **bold** 처리, no indent (`- **기술 스택 조사**`)
+   - Sub-items (수/금 업데이트): bold 없음, tab indent (`	- API 문서 읽기`)
 
    **Project grouping:**
    - Maintained for main items (team members with 2+ projects)
