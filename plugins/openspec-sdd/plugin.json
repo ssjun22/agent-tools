@@ -1,0 +1,24 @@
+{
+  "name": "openspec-sdd",
+  "description": "OpenSpec 기반 Spec Driven Development 워크플로우",
+  "depends": {
+    "skills": [
+      "pipeline/openspec-apply-change",
+      "pipeline/openspec-archive-change",
+      "pipeline/openspec-audit-spec",
+      "pipeline/openspec-bulk-archive-change",
+      "pipeline/openspec-continue-change",
+      "pipeline/openspec-elaborate-spec",
+      "pipeline/openspec-explore",
+      "pipeline/openspec-ff-change",
+      "pipeline/openspec-new-change",
+      "pipeline/openspec-onboard",
+      "pipeline/openspec-seed",
+      "pipeline/openspec-sync-specs",
+      "pipeline/openspec-verify-change"
+    ],
+    "agents": [],
+    "rules": ["openspec-sdd"],
+    "hooks": []
+  }
+}

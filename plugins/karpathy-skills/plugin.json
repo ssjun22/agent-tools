@@ -1,0 +1,10 @@
+{
+  "name": "karpathy-skills",
+  "description": "LLM 코딩 실수를 줄이기 위한 Karpathy 행동 가이드라인",
+  "depends": {
+    "skills": ["dev/karpathy-guidelines"],
+    "agents": [],
+    "rules": ["karpathy-skills"],
+    "hooks": []
+  }
+}

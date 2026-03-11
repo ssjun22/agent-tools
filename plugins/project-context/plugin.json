@@ -1,0 +1,10 @@
+{
+  "name": "project-context",
+  "description": "세션 간 프로젝트 컨텍스트 자동 주입 및 상태 관리",
+  "depends": {
+    "skills": ["project/project-context-init"],
+    "agents": [],
+    "rules": ["project-context"],
+    "hooks": ["load-context", "save-context"]
+  }
+}

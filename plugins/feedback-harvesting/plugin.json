@@ -1,0 +1,10 @@
+{
+  "name": "feedback-harvesting",
+  "description": "사용자 피드백 자동 감지 및 스킬/에이전트 개선 제안",
+  "depends": {
+    "skills": [],
+    "agents": ["feedback-harvester"],
+    "rules": ["feedback-harvesting"],
+    "hooks": ["check-harvest-updates.sh"]
+  }
+}

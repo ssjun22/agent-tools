@@ -1,0 +1,10 @@
+{
+  "name": "handoff",
+  "description": "세션 간 작업 인수인계 자동화",
+  "depends": {
+    "skills": [],
+    "agents": ["handoff-creator"],
+    "rules": ["handoff"],
+    "hooks": ["load-handoffs"]
+  }
+}

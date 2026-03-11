@@ -1,1 +1,0 @@
-/Users/choiyoungjun/agent-tools/strategies/project-context/skills/project-context-manager/SKILL.md

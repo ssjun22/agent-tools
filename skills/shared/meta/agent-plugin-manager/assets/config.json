@@ -1,0 +1,10 @@
+{
+  "plugins_path": "./plugins",
+  "default_structure": {
+    "required": ["plugin.json", "README.md"],
+    "optional": ["settings.json", "assets/"]
+  },
+  "templates": {
+    "readme": "assets/templates/plugin-readme-template.md"
+  }
+}
