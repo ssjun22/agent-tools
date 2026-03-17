@@ -14,12 +14,13 @@
       "spec-builder",
       "spec-checker",
       "code-reviewer",
+      "gemini-prompt-evaluator",
       "review-fixer",
       "docs-updater",
       "committer",
       "researcher"
     ],
     "rules": [],
-    "hooks": []
+    "hooks": ["workflow-timer"]
   }
 }

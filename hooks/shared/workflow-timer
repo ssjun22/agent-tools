@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""
+Claude Code PreToolUse/PostToolUse hook — workflow step timer
+
+Agent tool 호출 시 워크플로우 에이전트를 식별하고
+시작/종료 시각을 .claude/workflow-timing.json에 기록한다.
+
+- PreToolUse: 시작 시각 기록
+- PostToolUse: 종료 시각 + 경과 시간 계산, additionalContext로 AI에 주입
+"""
+
+import json
+import sys
+import time
+from pathlib import Path
+
+TIMING_FILE = Path(".claude/workflow-timing.json")
+
+# 워크플로우 에이전트 → 스텝 번호 매핑
+WORKFLOW_AGENTS = {
+    "interviewer": "3",
+    "spec-writer": "4",
+    "designer": "5",
+    "spec-builder": "6",
+    "spec-checker": "7",
+    "code-reviewer": "9a",
+    "gemini-prompt-evaluator": "9b",
+    "docs-updater": "10",
+    "committer": "11",
+}
+
+
+def detect_agent(tool_input: dict) -> str | None:
+    """tool_input에서 워크플로우 에이전트 이름을 식별한다."""
+    text = json.dumps(tool_input).lower()
+    for agent in WORKFLOW_AGENTS:
+        if agent in text:
+            return agent
+    return None
+
+
+def load_timing() -> dict:
+    if TIMING_FILE.exists():
+        return json.loads(TIMING_FILE.read_text())
+    return {"steps": []}
+
+
+def save_timing(data: dict) -> None:
+    TIMING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TIMING_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def format_elapsed(seconds: int) -> str:
+    mins, secs = divmod(seconds, 60)
+    if mins > 0:
+        return f"{mins}분 {secs}초"
+    return f"{secs}초"
+
+
+def handle_pre(agent: str) -> None:
+    data = load_timing()
+    data["steps"].append({
+        "agent": agent,
+        "step": WORKFLOW_AGENTS[agent],
+        "start": int(time.time()),
+        "end": None,
+        "elapsed": None,
+    })
+    save_timing(data)
+
+
+def handle_post(agent: str) -> None:
+    data = load_timing()
+    now = int(time.time())
+
+    # 가장 최근의 해당 에이전트 기록을 찾아 종료 시각 기록
+    for entry in reversed(data["steps"]):
+        if entry["agent"] == agent and entry["end"] is None:
+            entry["end"] = now
+            entry["elapsed"] = now - entry["start"]
+            save_timing(data)
+
+            elapsed_str = format_elapsed(entry["elapsed"])
+            step = WORKFLOW_AGENTS[agent]
+
+            # additionalContext로 AI에 주입
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": f"⏱ 스텝 {step} @{agent} 완료: {elapsed_str}",
+                }
+            }
+            print(json.dumps(output))
+            return
+
+    # 매칭되는 시작 기록이 없으면 무시
+
+
+def main() -> None:
+    raw = sys.stdin.read()
+    if not raw:
+        sys.exit(0)
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        sys.exit(0)
+
+    if payload.get("tool_name") != "Agent":
+        sys.exit(0)
+
+    tool_input = payload.get("tool_input", {})
+    agent = detect_agent(tool_input)
+    if agent is None:
+        sys.exit(0)
+
+    event = payload.get("hook_event_name", "")
+
+    if event == "PreToolUse":
+        handle_pre(agent)
+    elif event == "PostToolUse":
+        handle_post(agent)
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
