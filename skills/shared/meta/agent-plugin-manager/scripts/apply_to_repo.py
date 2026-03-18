@@ -220,7 +220,10 @@ def resolve_dependency(
 
 def merge_settings(plugin_path: Path, claude_dir: Path, dry_run: bool) -> int:
     """
-    Merge plugin's settings.json into target's .claude/settings.json.
+    Merge plugin's settings.json into target's .claude/settings.local.json.
+    Uses settings.local.json (gitignored, personal scope) by default.
+    If the target file already exists, its contents are deep-merged with
+    the plugin settings (plugin values take precedence on conflict).
     Returns the number of top-level keys merged, or -1 if no settings.json.
     """
     plugin_settings_path = plugin_path / "settings.json"
@@ -230,7 +233,7 @@ def merge_settings(plugin_path: Path, claude_dir: Path, dry_run: bool) -> int:
     with open(plugin_settings_path) as f:
         plugin_settings = json.load(f)
 
-    target_settings_path = claude_dir / "settings.json"
+    target_settings_path = claude_dir / "settings.local.json"
 
     if target_settings_path.exists():
         with open(target_settings_path) as f:
@@ -394,9 +397,9 @@ def main():
     settings_status = None
     keys_merged = merge_settings(plugin_path, claude_dir, args.dry_run)
     if keys_merged >= 0:
-        print(f"\n⚙️  Merging settings.json...")
+        print(f"\n⚙️  Merging settings.local.json...")
         label = "[dry-run] " if args.dry_run else ""
-        print(f"  ✅ {label}Merged {keys_merged} key(s) into .claude/settings.json")
+        print(f"  ✅ {label}Merged {keys_merged} key(s) into .claude/settings.local.json")
         settings_status = "merged"
 
     # Summary footer

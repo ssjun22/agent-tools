@@ -62,6 +62,62 @@ project-root/
 └── documentation-writer.md
 ```
 
+### `settings.json` / `settings.local.json`
+
+Claude Code는 범위(scope)별 설정 파일을 사용합니다:
+
+| 파일 | 범위 | Git | 용도 |
+|------|------|-----|------|
+| `~/.claude/settings.json` | 사용자 전역 | 비추적 | 모든 프로젝트에 적용되는 개인 설정 |
+| `.claude/settings.json` | 프로젝트 | 커밋 | 팀 공유 설정 |
+| `.claude/settings.local.json` | 로컬 | gitignore | 개인 오버라이드, 머신별 설정 |
+
+**우선순위:** local > project > user (더 구체적인 범위가 우선)
+
+플러그인 적용 시에는 `settings.local.json`(개인 범위)에 머지합니다.
+
+#### Hooks 설정 형식
+
+hooks는 **배열 구조**로 정의해야 합니다. 문자열 단축 형식은 지원되지 않습니다.
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/load-context",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/save-context",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**matcher 값:**
+
+| 이벤트 | matcher 값 |
+|--------|-----------|
+| SessionStart | `"startup"`, `"resume"`, `"clear"`, `"compact"`, `""` (전체) |
+| SessionEnd | `"clear"`, `"logout"`, `"prompt_input_exit"`, `"other"`, `""` (전체) |
+
 ## Plugin → Claude Code Mapping
 
 A plugin's `plugin.json` declares dependencies on shared resources in the `agent-tools` repository. When applying a plugin to a project, these dependencies are resolved from the agent-tools root directories and **symlinked** into the target project's `.claude/` subdirectories.
