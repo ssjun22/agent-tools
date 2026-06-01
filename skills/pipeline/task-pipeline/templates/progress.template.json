@@ -1,0 +1,17 @@
+{
+  "started_at": "__ISO8601__",
+  "request": "__USER_REQUEST__",
+  "branch": null,
+  "current_step": "clarify",
+  "max_rounds": null,
+  "current_round": null,
+  "finished_at": null,
+  "steps": {
+    "clarify":  { "state": "in_progress", "started_at": "__ISO8601__" },
+    "explore":  { "state": "pending" },
+    "plan":     { "state": "pending" },
+    "generate": { "state": "pending" },
+    "refactor": { "state": "pending" },
+    "evaluate": { "state": "pending", "rounds": [] }
+  }
+}
