@@ -23,6 +23,10 @@ from pathlib import Path
 DEFAULT_PROJECT_SECTIONS = ["프로젝트A", "프로젝트B", "기타"]
 EXCLUDE_SECTION = "기타"
 
+# Backlink (Obsidian wikilink) settings
+WIKILINK_RE = re.compile(r'\[\[([^\]]+)\]\]')
+MAX_BACKLINK_CHARS = 3000  # 대상 노트 본문 수집 상한 (Claude 요약용)
+
 
 def get_indent(line):
     """Return the indentation level of a line (count of leading tabs/spaces)."""
@@ -59,10 +63,21 @@ def get_week_range(today=None):
     return last_monday, last_sunday
 
 
+def get_week_of_month(d):
+    """Calculate Monday-start week number within the month.
+
+    Must match daily-work-log-manager's date_helper.get_week_of_month so that
+    file paths line up with how daily notes are actually stored.
+    Weeks start on Monday; the first week contains the 1st of the month.
+    """
+    first_weekday = d.replace(day=1).weekday()  # Mon=0, Sun=6
+    return (d.day + first_weekday - 1) // 7 + 1
+
+
 def build_file_path(vault_path, daily_notes_path, date):
     """Build Obsidian daily note file path for given date."""
     month_kr = f"{date.month}월"
-    week_kr = f"{math.ceil(date.day / 7)}주차"
+    week_kr = f"{get_week_of_month(date)}주차"
     return (
         Path(vault_path)
         / daily_notes_path
@@ -134,6 +149,130 @@ def assign_meeting_to_project(meeting_text, project_sections):
             best = section
             best_len = len(section)
     return best
+
+
+def extract_wikilinks_from_tree(items):
+    """Collect raw wikilink targets ([[...]] inner text) from an item tree."""
+    found = []
+    for item in items:
+        for m in WIKILINK_RE.finditer(item.get("text", "")):
+            found.append(m.group(1))
+        found.extend(extract_wikilinks_from_tree(item.get("children", [])))
+    return found
+
+
+def parse_wikilink_target(raw):
+    """
+    Split a raw wikilink body into (note_name, heading).
+
+    Handles "노트명", "노트명|별칭", "노트명#헤딩", "경로/노트명#헤딩|별칭".
+    """
+    target = raw.split('|', 1)[0].strip()  # drop alias
+    heading = None
+    if '#' in target:
+        target, heading = target.split('#', 1)
+        target = target.strip()
+        heading = heading.strip() or None
+    note_name = target.split('/')[-1].strip()  # last path segment = file name
+    return note_name, heading
+
+
+def build_vault_index(vault_path):
+    """Map lowercased file stem -> list of .md paths across the whole vault."""
+    index = {}
+    for p in Path(vault_path).rglob('*.md'):
+        index.setdefault(p.stem.lower(), []).append(p)
+    return index
+
+
+def strip_frontmatter(content):
+    """Remove a leading YAML frontmatter block if present."""
+    if content.startswith('---'):
+        m = re.match(r'^---\n.*?\n---\n', content, re.DOTALL)
+        if m:
+            return content[m.end():]
+    return content
+
+
+def extract_heading_section(content, heading):
+    """Return the section under a given heading (until next same/higher heading)."""
+    lines = content.split('\n')
+    start = None
+    level = None
+    for i, line in enumerate(lines):
+        m = re.match(r'^(#{1,6})\s+(.*)$', line)
+        if m and m.group(2).strip() == heading:
+            start = i
+            level = len(m.group(1))
+            break
+    if start is None:
+        return None
+    out = [lines[start]]
+    for line in lines[start + 1:]:
+        m = re.match(r'^(#{1,6})\s+', line)
+        if m and len(m.group(1)) <= level:
+            break
+        out.append(line)
+    return '\n'.join(out)
+
+
+def resolve_and_read_backlink(raw, vault_index, cache):
+    """
+    Resolve a wikilink target to a vault file and read its content (1-depth).
+
+    Returns a dict: {name, heading, found, path, ambiguous, content}.
+    Results are cached by (note_name, heading).
+    """
+    note_name, heading = parse_wikilink_target(raw)
+    key = (note_name.lower(), heading or "")
+    if key in cache:
+        return cache[key]
+
+    result = {
+        "name": note_name,
+        "heading": heading,
+        "found": False,
+        "path": None,
+        "ambiguous": False,
+        "content": None,
+    }
+
+    paths = vault_index.get(note_name.lower(), [])
+    if paths:
+        path = paths[0]
+        result["found"] = True
+        result["path"] = str(path)
+        result["ambiguous"] = len(paths) > 1
+        try:
+            content = strip_frontmatter(path.read_text(encoding='utf-8'))
+            if heading:
+                section = extract_heading_section(content, heading)
+                if section is not None:
+                    content = section
+            content = content.strip()
+            if len(content) > MAX_BACKLINK_CHARS:
+                content = content[:MAX_BACKLINK_CHARS] + "\n…(이하 생략)"
+            result["content"] = content
+        except Exception as e:
+            result["found"] = False
+            result["error"] = str(e)
+
+    cache[key] = result
+    return result
+
+
+def collect_meeting_backlinks(meeting, vault_index, cache):
+    """Resolve all wikilinks in a meeting item tree, deduped by (name, heading)."""
+    backlinks = []
+    seen = set()
+    for raw in extract_wikilinks_from_tree([meeting]):
+        bl = resolve_and_read_backlink(raw, vault_index, cache)
+        k = (bl["name"].lower(), bl.get("heading") or "")
+        if k in seen:
+            continue
+        seen.add(k)
+        backlinks.append(bl)
+    return backlinks
 
 
 def parse_todos_section(content, project_sections):
@@ -421,6 +560,12 @@ def collect_weekly_notes(config_path="config.json"):
     project_meetings = {section: [] for section in project_sections}
     all_issues = []  # [{"text", "date", "checked", "project"}]
     all_notes = []   # [{"text", "date", "children", "parent"}]
+    unassigned_meetings = []  # meetings whose title maps to no project
+
+    # Backlink resolution (lazy): vault index is built only when a meeting
+    # actually contains a [[wikilink]], to avoid scanning the whole vault for nothing.
+    vault_index = None
+    backlink_cache = {}
 
     current = monday
     while current <= sunday:
@@ -443,18 +588,31 @@ def collect_weekly_notes(config_path="config.json"):
                 date_label = f"{current.month}/{current.day}"
                 for meeting in day_meetings:
                     project = assign_meeting_to_project(meeting["text"], project_sections)
-                    if project is None:
-                        continue
-                    # Check for duplicate meeting title in project_meetings
+                    # Target bucket: project's meeting list, or the shared
+                    # unassigned list when the title maps to no project.
+                    bucket = (
+                        project_meetings[project] if project is not None
+                        else unassigned_meetings
+                    )
+                    # Check for duplicate meeting title within the same bucket
                     existing = next(
-                        (m for m in project_meetings[project] if m["text"] == meeting["text"]),
+                        (m for m in bucket if m["text"] == meeting["text"]),
                         None
                     )
                     if existing is None:
-                        project_meetings[project].append({
+                        # 1-depth backlink follow (Meetings only)
+                        backlinks = []
+                        if extract_wikilinks_from_tree([meeting]):
+                            if vault_index is None:
+                                vault_index = build_vault_index(vault_path)
+                            backlinks = collect_meeting_backlinks(
+                                meeting, vault_index, backlink_cache
+                            )
+                        bucket.append({
                             "text": meeting["text"],
                             "date": date_label,
-                            "children": meeting["children"]
+                            "children": meeting["children"],
+                            "backlinks": backlinks
                         })
 
                 # Collect issues with dedup
@@ -527,6 +685,7 @@ def collect_weekly_notes(config_path="config.json"):
         },
         "week_label": week_label,
         "projects": projects_output,
+        "unassigned_meetings": unassigned_meetings,
         "issues": all_issues,
         "notes": all_notes,
         "files_found": files_found,

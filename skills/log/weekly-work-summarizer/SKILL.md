@@ -20,6 +20,7 @@ allowed-tools: Read, Write, Bash
 - **출력**: `{group_meeting_path}/YYYY/M월/W주차/weekly-work-summary.md`
 - **제외**: `기타` 프로젝트 섹션 (개인 태스크)
 - **파싱 대상**: TODOs, Meetings, Issues, Notes 섹션 (Retrospect/Articles/Backlogs 제외)
+- **백링크 추적**: Meetings 섹션에 한해 `[[노트명]]` 백링크의 대상 노트 본문을 1단계(1-depth)까지 읽어와 보고서에 요약 보강
 
 ---
 
@@ -67,9 +68,12 @@ python scripts/collect_weekly_notes.py --config ../daily-work-log-manager/config
     "프로젝트A": {
       "completed": [{"text": "항목1", "children": []}],
       "in_progress": [{"text": "항목2", "children": [{"text": "하위 항목", "children": []}]}],
-      "meetings": [{"text": "미팅 제목", "date": "2/24", "children": [{"text": "세부 내용", "children": []}]}]
+      "meetings": [{"text": "미팅 제목 [[회의록-2026-02-24]]", "date": "2/24", "children": [{"text": "세부 내용", "children": []}], "backlinks": [{"name": "회의록-2026-02-24", "heading": null, "found": true, "path": "/.../회의록-2026-02-24.md", "ambiguous": false, "content": "대상 노트 본문 (최대 3000자)"}]}]
     }
   },
+  "unassigned_meetings": [
+    {"text": "[[5.27 렌즈 영어 평가 회의]]", "date": "2/27", "children": [], "backlinks": [{"name": "5.27 렌즈 영어 평가 회의", "heading": null, "found": true, "path": "/.../5.27 렌즈 영어 평가 회의.md", "ambiguous": false, "content": "대상 노트 본문 (최대 3000자)"}]}
+  ],
   "issues": [
     {"text": "이슈 내용", "date": "2/17", "checked": false, "project": "프로젝트A"},
     {"text": "해결된 이슈", "date": "2/16", "checked": true, "project": null}
@@ -85,7 +89,7 @@ python scripts/collect_weekly_notes.py --config ../daily-work-log-manager/config
 **에러 처리:**
 - `{"error": "..."}`: 에러 메시지 표시 후 사용자에게 안내
 - `files_missing`이 있는 경우: 정상 (해당 날 일지 없음). 계속 진행.
-- `projects`가 비어있고 `issues`/`notes`도 비어있는 경우: "지난 주 보고할 항목이 없습니다." 메시지 표시 후 종료
+- `projects`가 비어있고 `unassigned_meetings`/`issues`/`notes`도 모두 비어있는 경우: "지난 주 보고할 항목이 없습니다." 메시지 표시 후 종료
 
 ### Step 3: Markdown 요약본 생성
 
@@ -124,11 +128,20 @@ JSON 결과를 아래 형식으로 변환합니다.
   - **관련 항목 통합**: 같은 맥락의 작업이 별도 항목으로 나열된 경우, 하나의 문장으로 합치거나 상위-하위 관계로 재구성하여 중복을 제거한다. 통합 방식은 항목 간 관계에 따라 판단한다
   - 항목이 없으면 프로젝트 섹션 자체를 생략
 - **`미팅`** (해당 시): 프로젝트에 귀속된 미팅 항목
-  - 미팅 제목에 프로젝트명이 포함된 경우 해당 프로젝트에 자동 귀속 (예: "프로젝트A 관련 허들" → 프로젝트A)
-  - 어느 프로젝트에도 매핑되지 않는 미팅은 맥락을 보고 가장 관련 있는 프로젝트에 귀속하거나, 별도 공통 미팅으로 표기
+  - 미팅 제목에 프로젝트명이 포함된 경우 스크립트가 해당 프로젝트의 `meetings`로 자동 귀속 (예: "프로젝트A 관련 허들" → 프로젝트A)
+  - **미분류 미팅 (`unassigned_meetings` 필드)**: 제목에 프로젝트명이 없어 자동 귀속되지 못한 미팅 목록. 제목이 `[[회의록]]` 백링크 자체인 경우가 대표적이며, 이 목록도 **반드시 함께 처리한다** (누락 금지)
+    - 각 미분류 미팅을 맥락(제목·백링크 본문·날짜)을 보고 가장 관련 있는 프로젝트의 `미팅`에 귀속시킨다
+    - 어느 프로젝트와도 무관하면 별도 `공통 미팅` 소제목으로 묶어 표기
+    - 미분류 미팅도 `backlinks` 필드를 동일하게 가지므로 아래 백링크 요약 규칙을 똑같이 적용
   - 미팅 항목 형식: `- 미팅 제목 (M/D)` — 날짜 포함
+  - 미팅 제목에 포함된 `[[노트명]]` 백링크 문법은 출력 시 제거하여 제목만 깔끔하게 표기
   - 계층 구조는 탭(\t) 들여쓰기로 재귀 표현
   - 미팅이 없으면 이 소제목 생략
+  - **백링크 요약 보강** (`backlinks` 필드): 미팅에 연결된 회의록 등 대상 노트 내용을 요약하여 해당 미팅 하위에 들여쓰기로 추가
+    - `found: true`이고 `content`가 있는 항목만 사용. `found: false`(대상 노트 없음)는 무시
+    - `content`(대상 노트 본문)를 읽고 **상위자 보고 관점의 핵심만 1~3줄로 요약**하여 미팅 항목 아래 한 단계 들여쓴 bullet로 삽입한다. 원문을 그대로 붙여넣지 말 것
+    - 보고 가치 판단은 `논의사항`과 동일 기준 적용 (의사결정·리스크·일정/리소스 변경 위주, 사소한 세부사항·잡담 제외). 보고할 내용이 없으면 보강 생략
+    - `ambiguous: true`이면 vault에 동명 노트가 여러 개라 첫 번째를 사용한 것이므로, 요약이 어색하면 무리해서 포함하지 않는다
 - **`논의사항`** (해당 시): Issues/Notes에서 상위자 보고 대상으로 판단되는 항목
   - Claude가 맥락을 보고 **상위자에게 보고할 가치가 있는지** 판단하여 포함 여부 결정
   - 포함 기준: 배포 관련 의사결정, 리스크/블로커, 일정 변경, 리소스 요청 등 상위자가 알아야 할 사항
@@ -195,6 +208,13 @@ python scripts/collect_weekly_notes.py [--config CONFIG_PATH]
 8. 계층 구조 보존
 9. Meetings: 미팅 제목 기준 중복 제거 후 계층 구조 병합
 10. Issues/Notes: 날짜별 원문 수집 (Claude가 보고 대상 판단)
+11. Meetings 백링크 추적: 미팅 항목(하위 포함)의 `[[노트명]]`을 vault 전역에서 해석하여 대상 노트 본문을 1-depth 수집 (`backlinks` 필드)
+
+**백링크 추적 동작 (Meetings 한정):**
+- `[[노트명]]`, `[[노트명|별칭]]`, `[[노트명#헤딩]]`, `[[경로/노트명]]` 형태 모두 처리 (별칭/경로는 무시, 헤딩 지정 시 해당 섹션만 추출)
+- vault 전체(`vault_path` 하위)를 `*.md`로 인덱싱하여 파일명(대소문자 무시)으로 매칭. 미팅에 백링크가 하나도 없으면 인덱싱을 건너뜀 (lazy)
+- 대상 노트의 YAML frontmatter 제거, 본문 최대 3000자까지 수집 (초과 시 말미 생략)
+- 동명 노트가 여럿이면 첫 매치 사용 + `ambiguous: true`, 대상 노트가 없으면 `found: false`
 
 **중복 제거 기준:**
 - `(M/D~)` 날짜 annotation 제거 후 텍스트 비교
@@ -251,3 +271,9 @@ User: "/weekly-work-summarizer"
 
 ### "Python not found"
 → Python 3.6+ 설치 필요. `python3 scripts/collect_weekly_notes.py` 시도.
+
+### "백링크 요약이 보강되지 않음"
+→ 백링크 추적은 **Meetings 섹션 한정**입니다. ① 미팅 항목에 `[[노트명]]`이 실제로 적혀 있는지, ② 대상 노트 파일이 vault 내에 존재하는지(`found: false`면 누락), ③ 미팅이 프로젝트에 귀속되었는지(미팅 제목에 프로젝트명 포함) 확인하세요.
+
+### "백링크 추적이 느림"
+→ 미팅에 백링크가 있으면 vault 전체를 1회 인덱싱합니다. iCloud 동기화 vault 등에서 파일이 매우 많으면 다소 지연될 수 있으나 실행당 1회만 수행됩니다.
