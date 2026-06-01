@@ -270,8 +270,9 @@ Parse yesterday's file to extract incomplete TODOs, unresolved Issues, and incom
 8. **Add origin date:** Apply Origin Date Tracking Rule to all `- [ ]` items
 
 9. **Backlog classification:** After applying origin dates, classify each `[ ]` item by age:
-   - Origin date가 오늘 기준 **7일 이상** 경과된 항목 → **Backlogs**로 분류
-   - Origin date가 7일 미만인 항목 → **TODOs**에 유지
+   - Origin date가 오늘 기준 **14일 이상** 경과된 항목 → **Backlogs**로 분류
+   - Origin date가 14일 미만인 항목 → **TODOs**에 유지
+   - TODOs는 실제 진행 중인 작업을 관리하는 공간이므로, 단기간 미해결 항목은 강등하지 않음
    - 날짜 계산: `(M/D~)` 형식에서 날짜를 파싱. 연도는 오늘 날짜 기준으로 추론 (예: 오늘이 2월이면 1~2월은 올해, 12월은 작년)
    - **트리 단위로 이동:** 부모 `[ ]` 항목이 backlog로 분류되면 해당 항목의 모든 자식도 함께 이동
    - **프로젝트 헤더 처리:**
@@ -282,7 +283,7 @@ Parse yesterday's file to extract incomplete TODOs, unresolved Issues, and incom
 
 **Example parsing:**
 
-Input (recent file, date = 2026-02-09, today = 2026-02-17):
+Input (recent file, date = 2026-02-09, today = 2026-02-24):
 ```markdown
 ## TODOs
 - 프로젝트A
@@ -301,7 +302,7 @@ Input (recent file, date = 2026-02-09, today = 2026-02-17):
 	- [ ] 오늘 할 일을 작성하세요
 ```
 
-Extracted TODOs (after origin date + backlog classification, today = 2026-02-17):
+Extracted TODOs (after origin date + backlog classification, today = 2026-02-24):
 ```markdown
 ## TODOs
 - 프로젝트B
@@ -323,10 +324,10 @@ Extracted TODOs (after origin date + backlog classification, today = 2026-02-17)
 Note:
 - `[x] 회의 자료 준비` is excluded (fully completed, no children)
 - `오늘 할 일을 작성하세요` is excluded (template placeholder)
-- **`==코드 리뷰== (2/9~)`** — 2/9~는 오늘(2/17) 기준 8일 경과 → Backlogs로 이동
-- **`문서 작성 (2/7~)`** — 2/7~는 오늘 기준 10일 경과 → Backlogs로 이동
-- **`테스트 구조 잡아야지 않을까? (2/9~)`** — 부모가 `[x]`이므로 부모 날짜 없음, 자식(2/9~)이 8일 경과지만 부모가 `[x]`인 경우 자식의 날짜 기준 적용 → Backlogs 대신 TODOs 유지 (부모 컨텍스트 보존 목적)
-- **`개인 학습 (2/9~)`** — 자식들에 origin date 없음(상속), 부모 날짜(2/9~) 8일 경과지만 날짜가 없는 항목은 backlog 분류 대상 아님 → TODOs 유지
+- **`==코드 리뷰== (2/9~)`** — 2/9~는 오늘(2/24) 기준 15일 경과 → Backlogs로 이동
+- **`문서 작성 (2/7~)`** — 2/7~는 오늘 기준 17일 경과 → Backlogs로 이동
+- **`테스트 구조 잡아야지 않을까? (2/9~)`** — 부모가 `[x]`이므로 부모 날짜 없음, 자식(2/9~)이 15일 경과지만 부모가 `[x]`인 경우 자식의 날짜 기준 적용 → Backlogs 대신 TODOs 유지 (부모 컨텍스트 보존 목적)
+- **`개인 학습 (2/9~)`** — 자식들에 origin date 없음(상속), 부모 날짜(2/9~) 15일 경과지만 날짜가 없는 항목은 backlog 분류 대상 아님 → TODOs 유지
 - **Hierarchical date rule applied:** child items under same-dated parents have dates removed
   - `==코드 리뷰== (2/9~)` parent has date, child `PR #123 리뷰` inherits from parent
   - `개인 학습 (2/9~)` parent has date, children inherit from parent
@@ -449,7 +450,7 @@ Note:
 ## TODOs (N개)
 [display extracted TODOs with full structure]
 
-## Backlogs (N개) ← 7일 이상 미해결 항목
+## Backlogs (N개) ← 14일 이상 미해결 항목
 [display extracted Backlogs]
 
 ## Issues (N개)
@@ -648,7 +649,7 @@ After successfully creating today's file, display completion message:
 
 📋 이월된 항목:
 - TODOs: N개
-- Backlogs: N개 (7일 이상 미해결)
+- Backlogs: N개 (14일 이상 미해결)
 - Issues: N개
 - Notes: N개
 

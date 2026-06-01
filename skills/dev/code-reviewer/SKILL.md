@@ -1,157 +1,81 @@
 ---
 name: code-reviewer
-description: This skill should be used when refactoring code, reviewing pull requests, or checking code quality. Provides 78 prioritized patterns across frontend, backend, AI/LLM, code quality, and testing categories with incorrect/correct examples for each pattern.
+description: "분야별 서브 에이전트가 병렬로 코드를 리뷰하고, 메인 세션이 맥락 기반으로 최종 판단하는 코드 리뷰 스킬. '리뷰해줘', '코드 봐줘', '변경사항 검토해줘', 'review this', 'review my changes' 등의 요청에 사용한다. PR 리뷰, 커밋 전 검토, 리팩토링 전 점검에도 활성화할 것."
 ---
 
 # Code Reviewer
 
-Comprehensive code review guidelines for modern full-stack applications with AI/LLM integration. Contains 78 patterns across 5 categories, prioritized by impact to guide code reviews and refactoring.
+분야별 서브 에이전트가 독립적으로 코드를 리뷰하고, 메인 세션이 세션 맥락을 기반으로 최종 판단을 내린다.
 
-## When to Use
+## Workflow
 
-Identify your goal before using this skill:
+### Step 1. 리뷰 범위 파악
 
-### 🔧 Refactoring
+리뷰 대상을 파악한다. 사용자가 PR을 지정한 경우 해당 PR의 diff를, 그렇지 않으면 staged changes를 확인한다. 변경사항이 없으면 사용자에게 알리고 종료한다.
 
-Improve existing code quality and apply best practices.
+변경된 파일 목록과 변경 규모(파일 수, 대략적인 줄 수)를 간단히 보여준다.
 
-**Approach:**
-1. Identify which category applies (Frontend/Backend/AI/Quality/Testing)
-2. Review relevant patterns in `references/`
-3. Apply fixes based on priority (CRITICAL → HIGH → MEDIUM)
+변경된 파일의 종류를 분석하여 `reviewers/` 디렉토리에서 실행할 리뷰어를 제안한다. Security는 항상 포함된다. 사용자가 리뷰어를 추가하거나 제외할 수 있다.
 
-**Example:**
-- Frontend performance issues → Check `references/01_frontend/async-*`, `bundle-*` patterns
-- Backend optimization → Check `references/02_backend/query-optimization.md`, `async-await.md`
+### Step 2. 맥락 파악
 
-### 📝 PR Review
+이 세션에서 어떤 작업을 수행했는지, 그 과정에서의 중요한 정보들을 정리한다. 정리할 내용:
 
-Comprehensive pull request review with structured feedback.
+- 무엇을 구현/변경했는지
+- 왜 이렇게 변경했는지 (요구사항, 의도)
+- 작업 중 발견한 제약사항이나 주의점
 
-**Approach:**
-- Detailed workflow: `references/pr_review/workflow.md`
-- Comment format: `references/pr_review/output_format.md`
-- Writing rules: `references/pr_review/rules.md`
-- Examples: `references/pr_review/examples.md`
+정리한 내용을 사용자에게 보여주고 확인을 받는다. 사용자가 수정하거나 보충할 수 있다.
 
+> **이 단계가 중요한 이유:** 서브 에이전트는 세션 맥락을 모른다. 이 정리 내용이 Step 4에서 오케스트레이터가 최종 판단할 때 사용된다. 서브 에이전트에게는 넘기지 않는다 — 맥락 없이 코드만 보고 판단하는 것이 서브 에이전트의 객관성을 보장하기 때문이다.
 
+### Step 3. 서브 에이전트 병렬 리뷰
 
-### 🔍 Code Quality Check
+Step 1에서 사용자가 확인한 리뷰어 목록에 따라 서브 에이전트를 병렬로 실행한다.
 
-Analyze specific files or directories against patterns.
+`reviewers/` 디렉토리에서 해당 리뷰어의 프롬프트를 읽고, `{diff}`와 `{files}` 플레이스홀더를 실제 내용으로 치환하여 서브 에이전트로 실행한다.
 
-**Approach:**
-1. Identify relevant pattern categories for the code
-2. Read applicable patterns from `references/`
-3. Review code against CRITICAL and HIGH priority patterns
-4. Report findings with file:line references
+사용자가 컨벤션 문서를 지정한 경우, 해당 내용을 에이전트 프롬프트에 포함한다.
 
-## Pattern Categories
+### Step 4. 최종 판단
 
-| Priority | Category                                | Impact | Rules | Prefix                                                              |
-| -------- | --------------------------------------- | ------ | ----- | ------------------------------------------------------------------- |
-| 1        | Frontend (Next.js + React + TypeScript) | HIGH   | 46    | `async-`, `bundle-`, `server-`, `client-`, `rerender-`, `rendering-`, `js-`, `advanced-` |
-| 2        | Backend (Python + FastAPI)              | HIGH   | 8     | `backend-`                                                          |
-| 3        | AI/LLM (Prompt Engineering)             | MEDIUM | 8     | `ai-`                                                               |
-| 4        | Code Quality & Design Principles        | HIGH   | 8     | `quality-`                                                          |
-| 5        | Testing                                 | MEDIUM | 8     | `test-`                                                             |
+오케스트레이터(메인 세션)가 모든 서브 에이전트의 리뷰 결과를 수신한 후, Step 2에서 정리한 세션 맥락을 기반으로 최종 판단을 내린다.
 
-## Pattern Files
+**오케스트레이터가 하는 일:**
 
-### 1. Frontend (Next.js + React + TypeScript) - HIGH
+1. **유효성 필터링**: 세션 맥락을 알고 있으므로 맥락과 맞지 않는 지적을 걸러낸다.
+   - 예: "이 함수에 에러 핸들링이 없다" → 실제로는 상위 레이어에서 처리하는 구조였음 → 제외
 
-`references/01_frontend/` - React Best Practices (46 patterns across 8 categories)
+2. **우선순위 조정**: 맥락에 따라 등급을 올리거나 내린다.
+   - 예: "이 API에 인증이 없다"를 Minor로 보고했지만, 실제로 이 API는 외부 공개 예정 → Critical로 상향
 
-Pattern prefixes by category:
-- `async-` for Eliminating Waterfalls (CRITICAL)
-- `bundle-` for Bundle Size Optimization (CRITICAL)
-- `server-` for Server-Side Performance (HIGH)
-- `client-` for Client-Side Data Fetching (MEDIUM-HIGH)
-- `rerender-` for Re-render Optimization (MEDIUM)
-- `rendering-` for Rendering Performance (MEDIUM)
-- `js-` for JavaScript Performance (LOW-MEDIUM)
-- `advanced-` for Advanced Patterns (LOW)
+3. **중복 제거**: 여러 에이전트가 같은 이슈를 다른 관점에서 보고한 경우 하나로 합친다.
 
-### 2. Backend (Python + FastAPI) - HIGH
+4. **최종 보고서 작성**:
 
-`references/02_backend/`
+```
+## 코드 리뷰 결과
 
-- `async-await.md` - Async/Await for I/O Operations
-- `pydantic-validation.md` - Pydantic Model Validation
-- `dependency-injection.md` - Dependency Injection Pattern
-- `exception-handling.md` - Proper Exception Handling
-- `query-optimization.md` - Database Query Optimization
-- `type-hints.md` - Type Hints Usage
-- `transaction-management.md` - Transaction Management
-- `api-response.md` - API Response Structure
+### Critical (N건)
+- **파일:줄번호** — 이슈 설명 [관점]
+  → 제안: 수정 방향
 
-### 3. AI/LLM (Prompt Engineering) - MEDIUM
+### Important (N건)
+- **파일:줄번호** — 이슈 설명 [관점]
+  → 제안: 수정 방향
 
-`references/03_ai_llm/`
+### Minor (N건)
+- **파일:줄번호** — 이슈 설명 [관점]
 
-- `prompt-templates.md` - Structured Prompt Templates
-- `role-separation.md` - System/User/Assistant Role Separation
-- `few-shot-learning.md` - Few-shot Learning Examples
-- `token-optimization.md` - Token Usage Optimization
-- `json-parsing.md` - JSON Response Parsing
-- `prompt-injection.md` - Prompt Injection Prevention
-- `error-recovery.md` - Error Recovery Strategy
-- `context-management.md` - Context Window Management
+### 맥락 기반 제외 항목
+- ~~이슈 설명~~ — 제외 사유
 
-### 4. Code Quality & Design Principles - HIGH
+### 잘된 점
+- 긍정적 피드백 (있으면)
 
-`references/04_code_quality/`
+---
+리뷰 범위: {scope}, {N}개 파일, 약 {M}줄 변경
+실행된 리뷰어: {에이전트 목록}
+```
 
-- `single-responsibility.md` - Single Responsibility Principle
-- `open-closed.md` - Open/Closed Principle
-- `dependency-inversion.md` - Dependency Inversion
-- `meaningful-naming.md` - Meaningful Naming
-- `function-size.md` - Function Size and Complexity
-- `dry-principle.md` - DRY (Don't Repeat Yourself)
-- `kiss-principle.md` - KISS (Keep It Simple)
-- `magic-numbers.md` - Magic Numbers and Strings
-
-### 5. Testing - MEDIUM
-
-`references/05_testing/`
-
-- `aaa-pattern.md` - AAA Pattern (Arrange-Act-Assert)
-- `test-isolation.md` - Test Isolation
-- `test-naming.md` - Meaningful Test Names
-- `mocking-strategy.md` - Mock vs Real Dependencies
-- `async-testing.md` - Async Test Handling
-- `test-builders.md` - Test Data Builders
-- `error-cases.md` - Testing Error Cases
-- `flaky-tests.md` - Avoiding Flaky Tests
-
-## Pattern File Structure
-
-Each pattern file includes:
-
-- **Frontmatter** with title, impact level, and tags
-- **Brief explanation** of why it matters
-- **Incorrect code example** with explanation
-- **Correct code example** with explanation
-- **Note** with additional context
-
-## Tech Stack
-
-**Languages:** TypeScript, Python  
-**Frontend:** React 19, Next.js 15  
-**Backend:** FastAPI, Python 3.10+  
-**Database:** PostgreSQL, Prisma  
-**State Management:** Zustand, React Query (TanStack Query), tRPC  
-**Testing:** Jest, Vitest, Pytest  
-**Validation:** Zod, Pydantic  
-**AI/LLM:** Prompt Engineering, LiteLLM
-
-
-
-## Resources
-
-- **Frontend Guide:** `references/01_frontend/` (46 patterns)
-- **Backend Guide:** `references/02_backend/` (8 patterns)
-- **AI/LLM Guide:** `references/03_ai_llm/` (8 patterns)
-- **Code Quality Guide:** `references/04_code_quality/` (8 patterns)
-- **Testing Guide:** `references/05_testing/` (8 patterns)
-- **PR Review:** `references/pr_review/` (workflow, format, rules, examples)
+리뷰 후 수정은 사용자가 결과를 확인하고 별도로 요청한다. 리뷰 스킬이 직접 코드를 수정하지 않는다.

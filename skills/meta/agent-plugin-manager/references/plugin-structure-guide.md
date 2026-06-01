@@ -24,7 +24,7 @@ The manifest file declares what the plugin depends on. All dependency paths are 
   "depends": {
     "skills": [
       "dev/code-reviewer",
-      "meta/skill-critic"
+      "meta/skill-creator"
     ],
     "agents": [
       "handoff-creator",

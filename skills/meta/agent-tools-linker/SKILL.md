@@ -15,7 +15,7 @@ argument-hint: <type> <name> <repo-alias>
 ```
 
 - `$0` — 아티팩트 타입 (`skill`, `agent`)
-- `$1` — 아티팩트 이름 (예: `git-commit-helper`, `gemini-prompt-evaluator`)
+- `$1` — 아티팩트 이름 (예: `git-commit-helper`, `code-reviewer`)
 - `$2` — 대상 레포지토리 alias (예: `my-app`, `my-service`)
 
 인자가 3개 모두 전달되면 dry-run → apply 워크플로우를 바로 실행합니다.
@@ -23,7 +23,7 @@ argument-hint: <type> <name> <repo-alias>
 
 **예시:**
 - `/agent-tools-linker skill git-commit-helper my-app` — 스킬을 my-app에 심링크
-- `/agent-tools-linker agent gemini-prompt-evaluator my-app` — 에이전트와 의존 스킬을 함께 심링크
+- `/agent-tools-linker agent code-reviewer my-app` — 에이전트와 의존 스킬을 함께 심링크
 
 ## Overview
 
@@ -68,17 +68,17 @@ python3 scripts/link.py agent <name> --repo <alias> --no-deps
 
 에이전트(`.md`) 파일의 YAML frontmatter에 `skills:` 필드가 선언되어 있으면, 해당 스킬들을 자동으로 함께 링크한다.
 
-**예시 — gemini-prompt-evaluator.md:**
+**예시 — 에이전트 frontmatter:**
 ```yaml
 ---
-name: gemini-prompt-evaluator
+name: my-agent
 skills:
-  - gemini3-prompt-reviewer
-  - prompt-reviewer
+  - code-reviewer
+  - git-commit-helper
 ---
 ```
 
-위 에이전트를 링크하면 `gemini3-prompt-reviewer`와 `prompt-reviewer` 스킬도 `.claude/skills/`에 자동으로 심링크된다.
+위처럼 `skills:`가 선언된 에이전트를 링크하면 `code-reviewer`, `git-commit-helper` 스킬도 `.claude/skills/`에 자동으로 심링크된다.
 
 `--no-deps` 옵션으로 이 동작을 비활성화할 수 있다.
 

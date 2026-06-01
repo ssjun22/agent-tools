@@ -16,14 +16,14 @@ argument-hint: <plugin-name> <repo-alias>
 /agent-plugin-manager <plugin-name> <repo-alias>
 ```
 
-- `$0` — 플러그인명 (예: `dev-workflow`, `handoff`)
+- `$0` — 플러그인명 (예: `handoff`, `project-context`)
 - `$1` — 대상 레포지토리 alias (예: `my-app`, `my-service`)
 
 인자가 2개 모두 전달되면 validate → dry-run → apply 워크플로우를 바로 실행합니다.
 인자가 없거나 부족하면 대화형으로 확인합니다.
 
 **예시:**
-- `/agent-plugin-manager dev-workflow my-app` — dev-workflow 플러그인을 my-app에 적용
+- `/agent-plugin-manager project-context my-app` — project-context 플러그인을 my-app에 적용
 - `/agent-plugin-manager handoff my-service` — handoff 플러그인을 my-service에 적용
 
 ## Overview
@@ -63,9 +63,9 @@ Plugins do NOT contain `rules/`, `skills/`, `agents/`, or `hooks/` directories. 
   "name": "plugin-name",
   "description": "Plugin purpose description",
   "depends": {
-    "skills": ["dev/code-reviewer", "pipeline/workflow"],
-    "agents": ["interviewer", "spec-builder"],
-    "rules": ["handoff", "openspec-sdd"],
+    "skills": ["dev/code-reviewer", "dev/git-commit-helper"],
+    "agents": ["code-reviewer", "researcher"],
+    "rules": ["handoff", "project-context"],
     "hooks": ["load-context", "save-context"]
   }
 }

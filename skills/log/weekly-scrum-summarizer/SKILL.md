@@ -1,128 +1,176 @@
 ---
 name: weekly-scrum-summarizer
-description: This skill should be used when a Scrum Master needs to create or update weekly team summaries from Slack scrum thread messages. It processes Slack text containing daily scrum updates (weekly plan, Wednesday/Friday daily updates) and maintains a cumulative weekly summary document in Markdown format. Use this when the user provides Slack thread text.
+description: This skill should be used when a Scrum Master needs to create weekly team summaries from Slack scrum thread messages. It processes Slack text containing Wednesday updates, Friday updates, and weekly status sharing — all provided at once — and produces a single weekly summary document in Markdown format. Use this when the user provides Slack thread text with [수요일], [금요일], [한 주 요약] sections.
 ---
 
 # Weekly Scrum Summarizer
 
 ## Overview
 
-Transform Slack scrum thread messages into structured weekly team summaries in Obsidian. This skill enables Scrum Masters to maintain living weekly documents that accumulate team progress throughout the week.
+슬랙 스크럼 스레드 메시지를 Obsidian 주간 요약 문서로 변환한다.
 
-**Typical workflow:**
-- **한 주 요약**: Create new weekly document from weekly plan/goals
-- **수요일/금요일**: Update with mid-week progress (어제 한 일, 오늘 할 일)
+**사용 플로우:**
+1. 한 주 동안 슬랙 스레드에 수요일/금요일/한 주 요약이 쌓인다
+2. **다음 주 월요일**에 스크럼 마스터가 스레드 전체를 복사하여 한 번에 전달
+3. 이전 주 문서 1개를 생성
+
+**입력 구성:**
+- **한 주 요약**: 그 주 진행 중인 주요 작업 상태 공유 (+ 가끔 논의 사항, 블로커)
+- **수요일**: 어제 한 일 / 오늘 할 일 (주중 상세)
+- **금요일**: 어제 한 일 / 오늘 할 일 (주말 상세)
+
+**문서 구조:**
+- 한 주 요약 항목 → **main items** (진행 중인 주요 작업)
+- 수/금 항목 → **sub-items** (main items의 일별 상세 내역)
 
 ## When to Use
 
-Use this skill when:
-- User provides Slack thread text from daily scrum updates
-- User mentions "한 주 요약", "수요일", "금요일" with Slack text
-- User asks to "create weekly summary" or "update weekly summary"
-- User wants to organize team member activities from chat messages
+- 사용자가 `[수요일]`, `[금요일]`, `[한 주 요약]` 태그가 포함된 슬랙 텍스트를 제공할 때
+- 사용자가 "주간 요약", "스크럼 정리" 등을 요청할 때
 
 ## Non-goals
 
-이 스킬이 하지 않는 것:
 - 기존 main item 수정 또는 삭제
 - 과거 주차 문서 소급 수정
 - 팀원 추가/삭제 (config.yaml 직접 수정 필요)
 - Slack API 연동 (수동 복사-붙여넣기만 지원)
 - Jira, Notion 등 외부 시스템 연동
 
+## Configuration (사전 조건)
+
+⚠️ `config.yaml`은 민감 정보 포함, git 제외 대상.
+
+```bash
+cp config.yaml.example config.yaml
+```
+
+구조 상세는 `config.yaml.example` 참조. 핵심 키:
+- `obsidian.vault_path`: Obsidian vault 절대 경로
+- `team.members`: 팀원 이름 목록
+- `team.projects`: 팀원별 프로젝트 목록 (2개 이상인 경우만)
+- `team.project_keywords`: 프로젝트 자동 매칭 키워드
+
 ## How It Works
 
-### Step 1: Automatic Context Detection
+### Step 1: 입력 분리 및 날짜 결정
 
-The skill automatically determines:
-1. **Current date** → Week number calculation
-   - `scripts/update_weekly_summary.py`의 `get_week_info()`를 Bash로 호출하여 월/주차/기간을 가져온다
-   - 직접 계산하지 않는다 (경계 날짜 오류 방지)
-2. **Input type** (한 주 요약 vs 수/금 update):
-   - "진행 중인 주요 작업" 포함 → 한 주 요약
-   - "어제 한 일" 포함 → 수/금 업데이트
-3. **File path**: `{OBSIDIAN_VAULT}/group meeting/{YYYY}/{N}월/{W}주차/team-scrum-summary.md`
-4. **Mode**: CREATE (if file doesn't exist) or UPDATE (if exists)
+**1-1. 섹션 태그로 입력 분리:**
 
-### Step 2: Parse Slack Text
+사용자 입력에서 `[수요일]`, `[금요일]`, `[한 주 요약]` 태그를 찾아 3개 블록으로 분리한다. 순서는 가변적이다.
 
-입력 패턴은 DESIGN.md > Slack Text Parser 참조.
+```
+[수요일]
+슬랙 텍스트...
 
-**Parsing logic:**
-1. Extract team member names (한글 2-4자 패턴)
-2. Identify section headers (flexible matching):
-   - "진행 중인 주요 작업", "이번 주 목표", "주간 계획"
-   - "어제 한 일", "어제한일", "어제 한일"
-   - "오늘 할 일", "오늘 한 일", "오늘할일"
-3. **Parse indentation (parent-child relationships)**:
-   - Indentation (spaces/tabs) = hierarchical structure
-   - No indent → main item or top-level task
-   - Indented → sub-item under previous non-indented line
-   - No indentation in input → 파싱 결과 미리보기를 제시하고 사용자 승인 후 진행
-     - 미리보기 형식: 팀원별로 감지된 항목 목록을 계층 구조로 표시
-     - 승인 전까지 문서에 쓰지 않는다
-4. Extract work items (line-by-line until next section)
-5. **Match to projects** (for team members with 2+ projects):
-   - Check explicit project mention (e.g., "차이홍 관련")
-   - Match `project_keywords` from config.yaml (case-insensitive)
-   - No match → ask user + suggest adding keyword
+[금요일]
+슬랙 텍스트...
 
-### Step 3: Create or Update Document
+[한 주 요약]
+슬랙 텍스트...
+```
 
-**CREATE mode (한 주 요약):**
-1. Load template from `assets/weekly-summary-template.md`
-2. Fill header with title and period (월~금)
-3. For each team member:
-   - Add weekly plan items as **main items** (no sub-items yet)
-   - Filter out personal schedule items (반차, 휴가, etc.)
-   - **Project grouping** (if team member has 2+ projects in config.yaml):
-     - Group main items under project headers: `**Project Name**`
-     - Single project → flat list (no grouping)
-4. Save to Obsidian path
+- 3개 모두 있을 수도, 일부만 있을 수도 있다
+- 태그가 없고 슬랙 텍스트만 있으면 내부 키워드("진행 중인 주요 작업", "어제 한 일")로 타입을 추론한다
 
-**UPDATE mode (수/금):**
-1. Read existing document
-2. For each team member found in Slack text:
-   - Find their section in the document
-   - **Filter out personal items**: 오전 반차, 오후 반차, 휴가, 병가, 코드 페어, 미팅 등
-3. Parse work items with **main-sub item structure**:
+**1-2. 대상 주차 결정:**
 
-   **Match with main items:**
-   - For each new item:
-     1. Try to match with existing main items (30%+ keyword similarity)
-     2. If match found → prepare to add as sub-item
-     3. If no match → prepare to add under "기타"
+입력 데이터는 **이전 주** 것이다 (월요일에 지난주 스레드를 정리하는 플로우).
 
-   **카테고리 헤더 병합:**
-   - Slack 입력에서 카테고리 헤더(예: `* 서비스A`)로 묶인 하위 항목들이 있을 때:
-     1. 문서에 동일한 접두어를 가진 기존 항목(예: `서비스A 배포 대응`)이 있으면, 카테고리의 하위 항목들을 해당 기존 항목의 sub-item으로 병합
-     2. 기존 항목이 없으면 카테고리 헤더 자체를 새 main item으로 추가하고 하위 항목들을 sub-item으로 배치
-   - 이 규칙은 어제 한 일/오늘 할 일 등 서로 다른 섹션 간에도 적용
+- 대상 주차 = 현재 날짜 기준 **직전 주** (현재 날짜 - 7일 기준으로 계산)
+- 주차 계산: `week = (day_of_month - 1) // 7 + 1`
+- 해당 주의 월요일~금요일을 작성 기간으로 표시
+- **파일 경로**: `{OBSIDIAN_VAULT}/group meeting/{YYYY}/{N}월/{W}주차/team-scrum-summary.md`
 
-   **sub-item 계층화 조건:**
-   - 해당 main item을 달성하기 위해 수행한 구체적인 하위 작업일 때만 계층화
-   - 단순히 같은 프로젝트에 속하거나 키워드가 유사하다는 이유만으로 계층화하지 않는다
-   - 관계가 불명확한 경우 동일 레벨로 배치
+### Step 2: 슬랙 텍스트 파싱
 
-   **Indentation & Formatting:**
-   - Main items (한 주 요약): **bold** 처리, no indent (`- **기술 스택 조사**`)
-   - Sub-items (수/금 업데이트): bold 없음, tab indent (`	- API 문서 읽기`)
+각 블록(수요일, 금요일, 한 주 요약)을 개별 파싱한다.
 
-   **Project grouping:**
-   - Maintained for main items (team members with 2+ projects)
-   - Format: `**Project Name**` followed by main items
+**2-1. 팀원 인식:**
+- config.yaml의 `team.members` 목록과 매칭
+- 슬랙 텍스트에서 "이름 + 요일/시간" 패턴으로 팀원 구간을 분리
+  - 예: `최영준 수요일 오전 10:02`, `이준형 금요일 오후 1:22`
 
-4. Check for missing members → add notification in "📝 참고 사항" section
-5. Update "_마지막 업데이트" timestamp
-6. Save
+**2-2. 섹션 헤더 인식 (flexible matching):**
+- "진행 중인 주요 작업", "이번 주 목표", "주간 계획"
+- "어제 한 일", "어제한일", "어제 한일"
+- "오늘 할 일", "오늘 한 일", "오늘할일", "오늘한일"
+- "논의 사항", "도움 필요"
 
-**Important notes:**
-- Main items = weekly plan tasks
-- Sub-items = daily updates (Wed/Fri)
-- Preserve all existing content
-- Always add, never remove
+**2-3. 들여쓰기로 계층 구조 파싱:**
+- 들여쓰기 없음 → 카테고리 헤더 또는 독립 항목
+- 들여쓰기 있음 (spaces/tabs) → 상위 항목의 하위 항목
 
-### Step 4: Detect and Consolidate Similar Sub-Items (Optional)
+```
+* 차이홍                    ← 카테고리 헤더 (프로젝트명)
+    * API 스키마 구조 변경   ← 실제 작업 항목
+    * dev 서버 반영          ← 실제 작업 항목
+```
+
+**2-4. 개인 일정 필터링:**
+- 반차, 휴가, 병가, 연차 등 개인 일정 항목은 제외
+
+**2-5. 프로젝트 분류 (2개+ 프로젝트 팀원):**
+
+분류 우선순위:
+1. **텍스트 내 명시적 프로젝트명**: `[로시안]`, `* 차이홍`, `에코 >` 등의 접두어
+2. **config.yaml의 project_keywords 매칭**: 항목 텍스트에 키워드 포함 여부
+3. **매칭 실패**: 사용자에게 질문 + 키워드 추가 제안
+
+### Step 3: 문서 생성
+
+3개 블록의 파싱 결과를 합쳐서 **하나의 문서**를 생성한다.
+
+**처리 순서:**
+1. 한 주 요약 → main items 골격 생성
+2. 수요일 → main items에 sub-items 배치
+3. 금요일 → main items에 sub-items 배치
+
+**3-1. Main items 생성 (한 주 요약 기반):**
+
+각 팀원의 "진행 중인 주요 작업" 항목을 main items로 배치한다.
+
+- **bold** 처리, 들여쓰기 없음: `- **차이홍 문맥 보정 에이전트**`
+- 프로젝트 그룹핑 (2개+ 프로젝트): `**프로젝트명**` 헤더 아래 해당 항목 배치
+
+**3-2. Sub-items 배치 (수/금 기반):**
+
+수요일, 금요일의 "어제 한 일", "오늘 할 일" 항목을 main items 아래에 배치한다.
+
+**매칭 규칙:**
+- 각 수/금 항목에 대해 기존 main items와의 관련성을 판단
+- 매칭 성공 → 해당 main item 아래 sub-item으로 추가
+- 매칭 실패 → 해당 프로젝트의 독립 항목으로 배치, 프로젝트도 불분명하면 "기타"에 배치
+
+**카테고리 헤더 병합:**
+- 슬랙 입력에서 카테고리 헤더(예: `* 서비스A`)로 묶인 하위 항목들이 있을 때:
+  1. 문서에 동일한 접두어를 가진 기존 main item이 있으면 → 하위 항목들을 해당 main item의 sub-item으로 병합
+  2. 기존 항목이 없으면 → 카테고리 헤더를 새 main item으로 추가하고 하위 항목들을 sub-item으로 배치
+- 이 규칙은 어제 한 일/오늘 할 일 등 서로 다른 섹션 간에도 적용
+
+**sub-item 계층화 조건:**
+- 해당 main item을 달성하기 위해 수행한 구체적인 하위 작업일 때만 계층화
+- 단순히 같은 프로젝트에 속하거나 키워드가 유사하다는 이유만으로 계층화하지 않는다
+- 관계가 불명확한 경우 동일 레벨로 배치
+
+**sub-item 포맷:**
+- bold 없음, tab 들여쓰기: `	- API 문서 읽기`
+- 수/금 항목 중 프로젝트 접두어(`[로시안]`, `에코 >` 등)는 프로젝트 헤더로 이미 구분되므로 제거
+
+**3-3. 한 주 요약이 없는 팀원 처리:**
+
+수/금 데이터만 있는 팀원은:
+- 카테고리 헤더가 있으면 → 해당 헤더를 main item으로 승격
+- 없으면 → 프로젝트별 flat list로 배치 (bold 없이)
+
+**3-4. 누락 팀원 처리:**
+- config의 팀원 목록 대비 모든 블록에 없는 팀원 → "📝 참고 사항"에 알림
+- 일부 블록에만 없는 팀원 → 해당 블록 누락 명시
+
+**3-5. 저장:**
+- 파일 경로의 폴더가 없으면 자동 생성
+- "_마지막 업데이트" 타임스탬프 추가
+
+### Step 4: 유사 항목 감지 및 정리 (Optional)
 
 **문서 저장 완료 후** 선택적으로 실행한다. 저장과 독립된 단계이므로 이 단계 실패 시에도 저장된 문서는 보존된다.
 
@@ -149,32 +197,19 @@ The skill automatically determines:
 - 동일 main item 아래 sub-items만 비교 (main item 자체는 수정하지 않는다)
 - 2개 미만이면 스킵
 
-### Step 5: Configuration
-
-⚠️ `config.yaml`은 민감 정보 포함, git 제외 대상.
-
-```bash
-cp config.yaml.example config.yaml
-```
-
-구조 상세는 `config.yaml.example` 참조. 핵심 키:
-- `obsidian.vault_path`: Obsidian vault 절대 경로
-- `team.members`: 팀원 이름 목록
-- `team.projects`: 팀원별 프로젝트 목록 (2개 이상인 경우만)
-- `team.project_keywords`: 프로젝트 자동 매칭 키워드
-
-### Step 6: Output Report
+### Step 5: Output Report
 
 ```
-✅ 주간 요약 문서 업데이트 완료!
+✅ 주간 요약 문서 생성 완료!
 
 📄 파일: /path/to/obsidian/group meeting/YYYY/N월/W주차/team-scrum-summary.md
-📅 업데이트 날짜: YYYY-MM-DD (요일)
+📅 대상 기간: YYYY-MM-DD ~ YYYY-MM-DD
 
 ✏️ 업데이트된 팀원 (N명): [팀원1], [팀원2], ...
 
 ⚠️ 업데이트 누락:
-- 수요일 [팀원A] 내용이 없습니다.
+- [팀원A]: 한 주 요약, 금요일 내용 없음
+- [팀원B]: 전체 내용 없음
 ```
 
 파싱된 팀원이 0명이면 에러로 처리하고 저장하지 않는다.
@@ -187,9 +222,10 @@ cp config.yaml.example config.yaml
 | Obsidian 폴더 없음 | 폴더 자동 생성 후 알림 |
 | 파일 쓰기 권한 없음 | 현재 디렉토리에 백업 저장 후 알림 |
 | 파싱 결과 0명 | 에러 처리, 저장 중단, 원인 안내 |
+| 섹션 태그 없음 | 내부 키워드 기반 추론으로 fallback |
+| 기존 문서 이미 존재 | 사용자에게 덮어쓰기 확인 |
 
 ## Resources
 
 - `assets/weekly-summary-template.md`: 신규 문서 생성용 템플릿
 - `config.yaml.example`: 설정 파일 구조 참조
-- `DESIGN.md`: 파싱 알고리즘, 유사도 계산, 아키텍처 상세

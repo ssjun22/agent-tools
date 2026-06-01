@@ -13,12 +13,27 @@ Output:
 """
 
 import json
-import math
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
 DEFAULT_PROJECT_SECTIONS = ["프로젝트A", "프로젝트B", "기타"]
+
+
+def get_week_of_month(d):
+    """
+    Calculate Monday-start week number within the month.
+
+    Convention: weeks start on Monday and end on Sunday.
+    The first week contains the 1st of the month and may be partial.
+
+    Examples (April 2026, where 4/1 is Wednesday):
+        4/1(Wed)~4/5(Sun)  -> 1주차
+        4/6(Mon)~4/12(Sun) -> 2주차
+        4/27(Mon)~5/3(Sun) -> 5주차
+    """
+    first_weekday = d.replace(day=1).weekday()  # Mon=0, Sun=6
+    return (d.day + first_weekday - 1) // 7 + 1
 
 
 def normalize_project_sections(value):
@@ -93,8 +108,8 @@ def get_daily_paths(config_path="config.json"):
     # Korean month/week format
     today_month_kr = f"{today.month}월"
     yesterday_month_kr = f"{yesterday.month}월"
-    today_week_kr = f"{math.ceil(today.day / 7)}주차"
-    yesterday_week_kr = f"{math.ceil(yesterday.day / 7)}주차"
+    today_week_kr = f"{get_week_of_month(today)}주차"
+    yesterday_week_kr = f"{get_week_of_month(yesterday)}주차"
 
     # Generate file paths (YYYY/M월/N주차/YYYY-MM-DD.md)
     today_dir = vault_path / daily_notes / str(today.year) / today_month_kr / today_week_kr

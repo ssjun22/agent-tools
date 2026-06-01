@@ -2,9 +2,9 @@
 """
 Weekly notes collector for weekly-work-summarizer skill.
 
-Reads daily notes from the previous week (Mon-Sun), extracts TODOs
-from project sections (excluding "기타"), deduplicates repeated items,
-and classifies them as completed or in-progress.
+Reads daily notes from the previous week (Mon-Sun), extracts TODOs,
+Meetings, Issues, and Notes from project sections (excluding "기타"),
+deduplicates repeated items, and classifies them for weekly reporting.
 
 Usage:
     python collect_weekly_notes.py [--config CONFIG_PATH]
@@ -22,6 +22,11 @@ from pathlib import Path
 
 DEFAULT_PROJECT_SECTIONS = ["프로젝트A", "프로젝트B", "기타"]
 EXCLUDE_SECTION = "기타"
+
+
+def get_indent(line):
+    """Return the indentation level of a line (count of leading tabs/spaces)."""
+    return len(line) - len(line.lstrip('\t '))
 
 
 def normalize_project_sections(value):
@@ -80,9 +85,6 @@ def parse_meetings_section(content):
 
     meetings_text = meetings_match.group(1)
     lines = meetings_text.split('\n')
-
-    def get_indent(line):
-        return len(line) - len(line.lstrip('\t '))
 
     root = []
     item_stack = []  # list of (indent, item_dict)
@@ -152,9 +154,6 @@ def parse_todos_section(content, project_sections):
     current_project = None
     # Stack of (indent_level, item_dict)
     item_stack = []
-
-    def get_indent(line):
-        return len(line) - len(line.lstrip('\t '))
 
     for line in lines:
         if not line.strip():
@@ -275,6 +274,115 @@ def classify_items(items):
     return completed, in_progress
 
 
+def parse_issues_section(content):
+    """
+    Parse the ## Issues section from daily note content.
+
+    Returns list of {"text": str, "checked": bool} items.
+    Excludes placeholder text and empty items.
+    """
+    issues_match = re.search(r'^## Issues\s*\n(.*?)(?=^## |\Z)', content, re.MULTILINE | re.DOTALL)
+    if not issues_match:
+        return []
+
+    issues_text = issues_match.group(1)
+    items = []
+
+    for line in issues_text.split('\n'):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        checkbox_match = re.match(r'^- \[([ x])\] (.+)$', stripped)
+        if not checkbox_match:
+            continue
+
+        text = checkbox_match.group(2).strip()
+        checked = checkbox_match.group(1) == 'x'
+
+        # Skip placeholders
+        if any(p in text for p in ['발생한 문제를 기록하세요', '발생한 이슈를 기록하세요', '(예:']):
+            continue
+        # Skip empty items
+        if not text:
+            continue
+
+        # Remove date annotations for dedup
+        normalized = re.sub(r'\s*\(\d{1,2}/\d{1,2}~\)', '', text).strip()
+        if normalized:
+            items.append({"text": normalized, "checked": checked})
+
+    return items
+
+
+def parse_notes_section(content):
+    """
+    Parse the ## Notes section from daily note content.
+
+    Returns list of top-level items with their children.
+    Only includes items that have [ ] checkboxes (or parents of [ ] items).
+    """
+    notes_match = re.search(r'^## Notes\s*\n(.*?)(?=^## |\Z)', content, re.MULTILINE | re.DOTALL)
+    if not notes_match:
+        return []
+
+    notes_text = notes_match.group(1)
+    lines = notes_text.split('\n')
+
+    items = []
+    item_stack = []  # (indent, item_dict)
+
+    for line in lines:
+        if not line.strip():
+            continue
+
+        indent = get_indent(line)
+        stripped = line.strip()
+
+        # Skip placeholders
+        if '자유롭게 메모를 작성하세요' in stripped:
+            continue
+
+        checkbox_match = re.match(r'^- \[([ x])\] (.+)$', stripped)
+        plain_match = re.match(r'^- (.+)$', stripped)
+
+        if checkbox_match:
+            text = checkbox_match.group(2).strip()
+            checked = checkbox_match.group(1) == 'x'
+            normalized = re.sub(r'\s*\(\d{1,2}/\d{1,2}~\)', '', text).strip()
+            item = {"text": normalized, "checked": checked, "children": [], "is_checkbox": True}
+        elif plain_match:
+            text = plain_match.group(1).strip()
+            item = {"text": text, "checked": None, "children": [], "is_checkbox": False}
+        else:
+            continue
+
+        while item_stack and item_stack[-1][0] >= indent:
+            item_stack.pop()
+
+        if item_stack:
+            item_stack[-1][1]["children"].append(item)
+        else:
+            items.append(item)
+
+        item_stack.append((indent, item))
+
+    # Filter: only keep trees that contain at least one unchecked checkbox
+    def has_unchecked(item):
+        if item.get("is_checkbox") and not item.get("checked"):
+            return True
+        return any(has_unchecked(c) for c in item.get("children", []))
+
+    def clean_item(item):
+        """Remove internal flags from output."""
+        result = {"text": item["text"], "children": [clean_item(c) for c in item["children"]]}
+        if item.get("is_checkbox"):
+            result["checked"] = item["checked"]
+        return result
+
+    return [clean_item(item) for item in items if has_unchecked(item)]
+
+
 def collect_weekly_notes(config_path="config.json"):
     config_file = Path(config_path)
     if not config_file.exists():
@@ -311,6 +419,8 @@ def collect_weekly_notes(config_path="config.json"):
     merged_projects = {section: [] for section in project_sections}
     # meetings per project: { project_name: [{"text", "date", "children"}] }
     project_meetings = {section: [] for section in project_sections}
+    all_issues = []  # [{"text", "date", "checked", "project"}]
+    all_notes = []   # [{"text", "date", "children", "parent"}]
 
     current = monday
     while current <= sunday:
@@ -323,6 +433,8 @@ def collect_weekly_notes(config_path="config.json"):
                 content = file_path.read_text(encoding='utf-8')
                 day_todos = parse_todos_section(content, project_sections)
                 day_meetings = parse_meetings_section(content)
+                day_issues = parse_issues_section(content)
+                day_notes = parse_notes_section(content)
 
                 for section in project_sections:
                     if section in day_todos and day_todos[section]:
@@ -344,6 +456,46 @@ def collect_weekly_notes(config_path="config.json"):
                             "date": date_label,
                             "children": meeting["children"]
                         })
+
+                # Collect issues with dedup
+                for issue in day_issues:
+                    # Detect project tag like [프로젝트A]
+                    project_tag = None
+                    tag_match = re.match(r'^\[([^\]]+)\]\s*', issue["text"])
+                    if tag_match:
+                        tag_name = tag_match.group(1)
+                        if tag_name in project_sections:
+                            project_tag = tag_name
+
+                    # Dedup by normalized text
+                    existing = next(
+                        (i for i in all_issues if i["text"] == issue["text"]),
+                        None
+                    )
+                    if existing:
+                        if issue["checked"]:
+                            existing["checked"] = True
+                    else:
+                        all_issues.append({
+                            "text": issue["text"],
+                            "date": date_label,
+                            "checked": issue["checked"],
+                            "project": project_tag
+                        })
+
+                # Collect notes with dedup by text
+                for note in day_notes:
+                    existing = next(
+                        (n for n in all_notes if n["text"] == note["text"]),
+                        None
+                    )
+                    if existing is None:
+                        all_notes.append({
+                            "text": note["text"],
+                            "date": date_label,
+                            "children": note.get("children", [])
+                        })
+
             except Exception as e:
                 # Log error but continue
                 files_missing.append(date_str)
@@ -375,6 +527,8 @@ def collect_weekly_notes(config_path="config.json"):
         },
         "week_label": week_label,
         "projects": projects_output,
+        "issues": all_issues,
+        "notes": all_notes,
         "files_found": files_found,
         "files_missing": files_missing
     }

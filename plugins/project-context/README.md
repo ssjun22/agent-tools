@@ -36,11 +36,13 @@ plugins/project-context/
 └── skills/
     ├── project-context-init/
     │   └── SKILL.md                  # context/ 초기화 스킬
-    └── project-context-manager/
-        ├── SKILL.md                  # context/ 업데이트 스킬
-        └── references/
-            ├── project-template.md   # project.md 포맷 명세
-            └── status-template.md    # status.md 포맷 명세
+    ├── project-context-manager/
+    │   ├── SKILL.md                  # context/ 업데이트 스킬
+    │   └── references/
+    │       ├── project-template.md   # project.md 포맷 명세
+    │       └── status-template.md    # status.md 포맷 명세
+    └── context-simplify/
+        └── SKILL.md                  # context/ 간소화 스킬
 ```
 
 ### 각 프로젝트 레포
@@ -83,6 +85,7 @@ plugins/project-context/
 |------|------|
 | `/project-context-init` | 새 프로젝트에 context/ 구조 초기화 |
 | `/project-context-manager` | project.md / status.md 업데이트 |
+| `/context-simplify` | project.md / status.md 간소화 (비대화 방지) |
 
 ## Installation
 
@@ -111,6 +114,5 @@ python3 agent-tools/.claude/skills/agent-tools-linker/scripts/link.py plugin pro
 |------|------|--------|
 | `handoff` | 세션 간 작업 인수인계 | 작업 단위, 태스크 중심 |
 | `project-context` | 프로젝트 맥락 유지 | 프로젝트 단위, 상태 중심 |
-| `openspec-sdd` | 스펙 기반 개발 | 스펙 문서 관리 |
 
-세 전략은 함께 사용할 수 있으며 역할이 겹치지 않는다.
+두 전략은 함께 사용할 수 있으며 역할이 겹치지 않는다.
