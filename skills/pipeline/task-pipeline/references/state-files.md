@@ -30,19 +30,21 @@ mkdir -p "$TASK_PIPELINE_DIR"
 ├── 01-clarify.md
 ├── 02-explore.md
 ├── 03-plan.md
-├── 04-generate.md          # round 1
+├── 04-generate-T1.md       # round 1 — 태스크별 산출물 (04-generate-<Tx>.md)
+├── 04-generate-T2.md
 ├── 05-refactor.md          # round 1
 ├── 06-evaluate.md          # round 1
-├── 04-generate-2.md        # round 2 retry 시 추가 (round 1 파일은 그대로 유지)
+├── 04-generate-T2-R2.md    # round 2 retry 시 추가 (round 1 파일은 그대로 유지)
 ├── 05-refactor-2.md
 ├── 06-evaluate-2.md
+├── 07-context-update.md    # done 종료 시 컨텍스트 문서 업데이트 기록 (메인이 작성 — 제안·승인·적용)
 └── handoff.md              # ④ 분기에서 handoff 선택 시
 ```
 
 규칙:
 
-- round 1은 접미사 없음 (`04-generate.md`)
-- round N≥2는 `-N` 접미사 (`04-generate-2.md`)
+- generate는 *태스크별* 산출물 — round 1은 `04-generate-<Tx>.md`, round N≥2는 `04-generate-<Tx>-R<N>.md`
+- refactor·evaluate는 round 1 접미사 없음(`05-refactor.md`), round N≥2는 `-N` 접미사(`05-refactor-2.md`)
 - 1라운드에 끝나는 일반 케이스는 접미사 없는 깔끔한 트리
 
 ## progress.json
@@ -53,7 +55,7 @@ mkdir -p "$TASK_PIPELINE_DIR"
 {
   "started_at": "2026-05-07T14:30:22Z",
   "request": "사용자가 /task-pipeline 인자로 넘긴 요약",
-  "branch": "task-pipeline/<slug>",
+  "branch": "feat/<slug>",
   "current_step": "clarify | explore | plan | generate | refactor | evaluate | done | handoff | cancelled | failed",
   "max_rounds": 3,
   "current_round": 1,
@@ -77,7 +79,7 @@ mkdir -p "$TASK_PIPELINE_DIR"
 
 `current_step`은 마지막 활성 단계 또는 종료 상태(`done` / `handoff` / `cancelled` / `failed`).
 
-`branch`는 plan 확정 후 메인이 생성한 브랜치명.
+`branch`는 plan 확정 후 메인이 생성한 브랜치명 (`<type>/<slug>` — type은 plan의 작업 유형).
 
 ## tasks.json
 
@@ -146,7 +148,7 @@ finished_at: 2026-05-07T14:35:11Z
 
 | status | 의미 | 메인의 처리 |
 |---|---|---|
-| `completed` | 단계 본업 정상 완료 | 다음 단계로 진행 (게이트 4지점이면 사용자 confirm 후) |
+| `completed` | 단계 본업 정상 완료 | 다음 단계로 진행 (해당 지점에 게이트가 정의돼 있으면 사용자 confirm 후) |
 | `cancelled` | 사용자가 인터뷰 도중 "취소/그만/잘못 호출" 발화 | 사이클 종료, `current_step = cancelled`, archived/로 이동 |
 | `blocked` | 외부 결정·정보가 필요해 단계 진행 불가 | 사용자에게 blocker 제시 → 재시도/중단 선택 |
 | `failed` | 도구·환경 에러 (sub-agent 본업 자체 실패) | retry 소진 없이 즉시 사용자 알림, `current_step = failed` 종료 |

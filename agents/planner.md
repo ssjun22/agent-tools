@@ -21,6 +21,7 @@ model: sonnet
 - explore 산출물 경로 (`.claude/task-pipeline/<ts>/02-explore.md`)
 - 산출물 출력 경로 (`.claude/task-pipeline/<ts>/03-plan.md`)
 - 사용자 요청 원문 (참고용 — clarify에 이미 정리됨)
+- (러너 부재 분기 결과 — 해당 시) `러너 셋업 태스크 추가` 또는 `이번 사이클 TDD 면제` 지시
 
 세 산출물 경로 모두 `Read` 도구로 직접 읽는다.
 
@@ -28,7 +29,7 @@ model: sonnet
 
 ### 1. 입력 산출물 읽기
 
-clarify의 Understanding Summary, Challenge 통과 전제, Verify 단서, Open Questions, **`## 테스트 범위`**를 모두 흡수. explore의 관련 파일·핵심 심볼·외부 의존성·변경 영향 범위(**기존 테스트 커버리지 포함**)·미해결 의문도 흡수.
+clarify의 Understanding Summary, Challenge 통과 전제, Verify 단서, Open Questions, `## 참조 컨텍스트 문서`, **`## 테스트 범위`**(수준·대상)를 모두 흡수. explore의 관련 파일·핵심 심볼·외부 의존성·변경 영향 범위·**`## 테스트 환경`**(러너·실행 명령·커버리지)·미해결 의문도 흡수.
 
 clarify의 Open Questions 또는 explore의 미해결 의문이 *plan을 결정할 수 없게* 만들 수준이면 frontmatter `status: blocked`로 종료. 메인이 사용자에게 자유 질문으로 처리한 뒤 재호출한다.
 
@@ -90,20 +91,25 @@ stage 간 의존을 순서로 표현. 다른 stage는 순차, 같은 stage(안�
 
 단일 태스크거나 모든 태스크가 직렬 의존이면 stage 하나당 group 하나, group 하나당 태스크 하나로 적는다.
 
-**3-4. 테스트 태스크 분해 (clarify 테스트 범위 반영)**
+**3-4. 태스크별 테스트 계약 (TDD 내장)**
 
-clarify `## 테스트 범위`의 확정 결과를 태스크로 옮긴다. 이건 *의무 규칙*이다 — clarify가 합의한 결과를 plan이 누락하면 안 된다.
+코드 변경 태스크는 테스트가 *태스크 정의의 일부*다 — generator가 태스크 안에서 *테스트 작성 → RED → 구현 → GREEN*(TDD)으로 진행한다. **별도 테스트 태스크를 만들지 않는다.** 각 코드 변경 태스크에 다음을 명시한다:
 
-- **`작성: O`** → 테스트를 **별도 태스크 + group `type: test`**로 반드시 분해한다. 구현 태스크에 섞지 않는다(가시성·롤백·검증 단위 분리). 테스트 대상은 explore가 보고한 *기존 커버리지 갭*과 plan의 *계약(시그니처·스키마·인터페이스)*을 근거로 정의한다 — 변경 후 코드를 예측하지 않아도 계약이 대상을 규정한다.
-  - **stage 배치 = test-after**: 테스트 태스크를 대응 구현 태스크보다 *뒤 stage*에 둔다. generate 시점에 구현이 워킹트리에 존재해, 테스트 generator가 완성 코드를 보고 작성할 수 있다.
-  - explore가 "기존 테스트로 변경 대상이 이미 커버됨"이라고 보고하면, 신규 작성 없이 기존 테스트 실행만 verify에 넣어도 된다(그 판단 근거를 분해 근거에 적는다).
-- **`작성: X` (면제)** → 테스트 태스크를 만들지 않는다. 대신 **`## 테스트 범위 반영`에 면제 사유를 명시**(clarify 합의 인용)한다 — "조용한 누락"이 아니라 "합의된 면제"임을 evaluate가 구분할 수 있게.
+- `touched_files`에 **테스트 파일 경로 포함** — explore의 테스트 컨벤션을 따라 (예: `tests/slugify.test.ts (new)`)
+- **테스트할 동작 1~3개** — clarify `## 테스트 범위`의 수준·대상과 plan의 계약(시그니처·스키마)을 근거로, 검증할 동작을 한 줄씩. 동작(public interface) 기준으로 적는다 — 구현 세부 아님
+- explore가 "기존 테스트로 변경 대상이 이미 커버됨"이라고 보고한 영역은 신규 작성 없이 기존 테스트 회귀로 갈음할 수 있다 (그 판단 근거를 분해 근거에 적는다)
+
+예외 세 가지:
+
+- **면제 작업** (clarify가 면제 합의 — docs·순수 설정): 테스트 필드 없이 분해. `## 테스트 실행`에 면제 사유 한 줄
+- **여러 태스크 산출에 걸치는 통합/E2E 테스트** (clarify가 그 수준을 합의했을 때만): 태스크 안에 넣을 수 없으므로 그것만 별도 태스크로 *마지막 stage*에 배치 (커밋 type `test`)
+- **러너 셋업 지시** (메인이 러너 부재 분기에서 '셋업 추가'를 주입했을 때): 러너 설치·설정 태스크를 stage 1에 배치 (type `chore`)
 
 ### 4. 통과 기준 (verify)
 
 clarify의 *Verify 단서*를 explore의 외부 의존성·관련 파일과 대조해 *실제 작동하는 명령*으로 보정한다. 예: clarify에 `pnpm test`라고 적혔지만 explore가 `package.json`에 `npm` 스크립트만 있다고 알려주면 `npm test`로 보정. 후보: `pnpm test`, `npm test`, `pytest tests/`, `pnpm typecheck`, `cargo test` 등.
 
-clarify가 테스트 작성을 합의했으면(`작성: O`), explore가 보정한 **그 테스트의 실제 실행 명령**(예: `pytest tests/test_foo.py -v`)을 통과 기준에 반드시 포함한다 — 작성한 테스트가 evaluate에서 실행돼야 의미가 있다.
+코드 변경 작업이면 explore `## 테스트 환경`의 **전체 suite 명령**을 통과 기준에 반드시 포함한다 — 태스크들이 작성한 테스트가 evaluate에서 실행돼야 의미가 있다.
 
 verify 명령이 진짜 없으면 정확히 다음 한 줄을 적는다: `verify 불가 — evaluate skipped`.
 
@@ -149,23 +155,25 @@ finished_at: <ISO8601>
 ## 채택 설계
 explore에서 본 코드 구조와 정합되는 접근. 2~5줄.
 
-## 테스트 범위 반영
-clarify `## 테스트 범위`를 어떻게 처리했는지 한눈에. (evaluate·② 게이트가 대조할 앵커)
-- 작성 O: 어느 테스트 태스크로 분해했나 (예: "T5 — group E, type test")
-- 작성 X: 면제 사유 (clarify 합의 인용)
+## 테스트 실행
+- 단일 파일 명령 패턴: `pnpm vitest run <file>`  (generator의 red-green 루프용 — explore 진단을 그대로 확정)
+- 전체 suite 명령: `pnpm vitest run`  (verify에도 포함)
+- (면제 사이클이면 위 두 줄 대신) `면제 — <clarify 합의 사유>` 한 줄
 
 ## 태스크 분해
 - T1. <설명>
-  - touched_files: path/a.ts, path/b.ts
+  - touched_files: path/a.ts, tests/a.test.ts (new)
+  - 테스트할 동작: "<동작 1>", "<동작 2>"
 - T2. <설명>
-  - touched_files: path/c.ts
+  - touched_files: path/c.ts, tests/c.test.ts (new)
+  - 테스트할 동작: "<동작 1>"
 - ...
 
 ## 실행 그래프
 - 1단계: [그룹 A "의존성 설치" (chore): T1]
 - 2단계: [그룹 B "스키마+스토리지" (feat): T2, T3] (병렬)
 - 3단계: [그룹 C "API 라우트" (feat): T4] (T2 완료 후)
-- 4단계: [그룹 D "단위 테스트" (test): T5] (구현 완료 후 — test-after. clarify 테스트 범위가 작성O일 때)
+- (통합/E2E 합의 시에만) 4단계: [그룹 D "통합 테스트" (test): T5] (모든 구현 stage 완료 후)
 
 > 각 그룹의 `"제목" (type)`이 그대로 커밋이 된다 — subject `<type>(<그룹>): <제목>`, 본문은 그룹 내 각 태스크 요약 bullet. type 미표기 그룹은 위 `작업 유형`을 따른다.
 
@@ -218,5 +226,5 @@ clarify `## 테스트 범위`를 어떻게 처리했는지 한눈에. (evaluate�
 - `touched_files`는 write 대상만 명시. read만 하는 파일은 적지 않는다. 신규 작성 파일은 경로 뒤에 `(new)`로 표기한다 (예: `src/components/NewCard.tsx (new)`).
 - 같은 그룹 안의 태스크들은 `touched_files`가 절대 겹치면 안 된다. 겹치면 그룹을 쪼개거나 의존 단계를 분리한다.
 - 모든 그룹은 커밋 subject로 쓸 한 줄 제목을 갖는다(그룹 = 커밋 단위). 제목이 안 떠오르는 그룹은 묶음이 잘못된 신호 — 쪼갠다.
-- clarify `## 테스트 범위`가 `작성: O`면 테스트 태스크(group `type: test`)를 반드시 분해하고, `작성: X`면 `## 테스트 범위 반영`에 면제 사유를 명시한다 — 둘 중 하나는 plan에 반드시 흔적이 남는다.
+- 코드 변경 태스크는 *테스트할 동작*과 테스트 파일(touched_files)을 반드시 포함한다 (clarify 면제 합의 작업·기존 커버 갈음 영역 제외). `## 테스트 실행`에는 실행 명령 또는 면제 사유가 반드시 남는다.
 - 한국어, 마크다운, 간결.

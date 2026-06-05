@@ -31,6 +31,7 @@ model: sonnet
 - `Read`: 입력 산출물 + generate가 변경한 *변경 파일 목록*의 파일들
 - `Edit`: 리팩토링 적용
 - `Bash`:
+  - plan `## 테스트 실행`의 **전체 suite 명령** — 리팩토링 후 GREEN 유지 확인용
   - `git add <명시적 파일 경로>`
   - `git commit -m "refactor: <summary>"` — refactor 커밋 1개 (또는 의미상 분리해야 하면 여러 개)
   - `git rev-parse HEAD`
@@ -65,9 +66,13 @@ plan과 generate 산출물을 Read. **generate 산출물의 *변경 파일 목�
 - 새 파일 생성은 *추출(extract)*에 한해 허용 (예: 큰 함수를 별도 모듈로)
 - 동작이 미세하게라도 바뀔 가능성이 있으면 그 리팩토링은 *건너뛴다*
 
-### 4. git commit
+### 4. GREEN 확인 → git commit
 
-리팩토링한 파일을 명시적 add → `git commit -m "refactor: <summary>"`. 의미상 분리해야 할 변경이 둘 이상이면 커밋도 분리.
+커밋 전에 plan `## 테스트 실행`의 전체 suite 명령을 실행해 **GREEN 유지를 확인**한다 — 동작 보존의 기계적 근거.
+
+- **GREEN** → 리팩토링한 파일을 명시적 add → `git commit -m "refactor: <summary>"`. 의미상 분리해야 할 변경이 둘 이상이면 커밋도 분리.
+- **FAIL** → 해당 리팩토링을 워킹트리에서 되돌리고 그 항목은 skip 처리, 산출물에 실패 요약을 기록. 되돌린 후 다른 리팩토링이 남아 있으면 재실행으로 GREEN 재확인 후 커밋.
+- plan이 테스트 면제 사이클이면 이 확인은 생략하고 기존처럼 판단한다 (동작 영향이 의심되면 그 리팩토링은 skip).
 
 `git rev-parse HEAD`로 해시 확보.
 
@@ -99,6 +104,7 @@ finished_at: <ISO8601>
 - <hash> · `refactor: format 헬퍼 통합`
 
 ## 동작 보존 근거
+- 테스트 GREEN 유지: `pnpm vitest run` → exit 0 (면제 사이클이면 "면제 — 판단 근거" 한 줄)
 - 외부 시그니처 변경 없음
 - generate가 작성한 새 인터페이스 그대로 유지
 ```
@@ -144,7 +150,7 @@ finished_at: <ISO8601>
 - 동작 변경 금지. 외부 인터페이스 그대로.
 - generate 변경 파일 범위 밖 건드리지 않기.
 - 새 의존성 추가 금지.
-- 자가 verify 금지 (evaluator가 돌림).
+- 합격 판정 금지 — 테스트 실행은 *동작 보존(GREEN 유지) 확인* 용도로 plan의 테스트 명령만. plan 부합 판정은 evaluator의 일.
 - amend 금지 (refactor 커밋도 새 커밋).
 - 무리해서 리팩토링 만들지 않기 — 가치 없으면 skip.
 - 한국어, 마크다운, 간결.
