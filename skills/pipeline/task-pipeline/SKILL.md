@@ -155,7 +155,7 @@ planner는 시각을 알 수 없으므로 frontmatter의 `started_at` / `finishe
 
 1. `tasks.json` 초기화 — `templates/tasks.template.json`을 cp하면 `{"tasks": []}` 빈 배열로 시작한다. 메인이 plan의 각 태스크에 대해 `references/state-files.md`의 tasks 객체 스키마를 따라 새 객체를 만들어 배열에 push한다 (`id`/`title`/`group`/`stage`/`touched_files`/`depends_on`은 plan에서 채우고, `status`는 `pending`, `commit`/`started_at`/`finished_at`은 `null`).
 2. 브랜치명 제안 — clarify Understanding Summary 첫 bullet에서 slug 추출(영문 kebab-case, 최대 30자), plan 본문 상단의 **작업 유형** prefix와 결합. 패턴: `<type>/<slug>` (예: `feat/home-screen-scaffold`, `refactor/components-extract`). plan에 작업 유형이 없거나 모호하면 `feat`로 기본 적용.
-3. ② Plan 확인 게이트 — AskUserQuestion으로 plan 본문 + 제안 브랜치명을 함께 confirm. 사용자가 `브랜치명 변경`을 선택하면 메인이 자유 텍스트로 입력 받아 검증(`^[a-z0-9][a-z0-9/_-]{0,63}$`) 후 그 값을 사용한다.
+3. ② Plan 확인 게이트 — planner 산출물은 디스크에만 있으므로, 메인이 plan 본문(채택 설계·태스크 분해·verify·Max Rounds)과 제안 브랜치명을 화면에 먼저 출력한 뒤 AskUserQuestion으로 confirm한다 (출력하지 않으면 사용자는 무엇을 확인하는지 못 본다). 사용자가 `브랜치명 변경`을 선택하면 메인이 자유 텍스트로 입력 받아 검증(`^[a-z0-9][a-z0-9/_-]{0,63}$`) 후 그 값을 사용한다.
 4. confirm 후 브랜치 생성 전 git preflight를 수행.
    - `git rev-parse --is-inside-work-tree`가 실패하면 `current_step=failed`로 종료. task-pipeline는 태스크별 commit을 전제로 하므로 비-git 디렉토리에서는 진행하지 않는다.
    - `git status --porcelain -- ':!.claude/task-pipeline'`로 작업트리를 확인한다. 기존 변경이 있으면 브랜치를 만들지 않고 사용자에게 commit/stash/중단 중 하나를 요청한다.
@@ -253,7 +253,7 @@ evaluator는 **plan 부합 검증(주축) + verify 명령(보조)** 두 축으�
 
 종료 후 메인이 본문 `Verdict` + 실패 유형을 읽어 분기한다. **핵심 원칙: 자동 재시도는 객관 신호(구조·verify)에만. 주관 판단(의도 누락)·이탈은 사람이 결정한다** (③의 "자가 평가 retry 루프 금지" 원칙과 동일).
 
-- `Verdict: PASS` → ③ 결과 검수 게이트
+- `Verdict: PASS` → ③ 결과 검수 게이트. evaluate 산출물은 디스크에만 있으므로, 메인이 결과 요약(Verdict·plan 부합/verify 두 축 결과·핵심 변경)을 화면에 먼저 출력한 뒤 AskUserQuestion으로 검수받는다 (출력하지 않으면 사용자는 무엇을 검수하는지 못 본다)
 - `Verdict: FAIL` → 본문의 실패 유형에 따라:
   - **구조 누락 / verify FAIL** (객관): 영향 태스크를 tasks.json에서 `failed`로 변경. 추정 불가면 사용자에 자유 질문. round +1 후 **자동으로 generator → refactorer → evaluator 순 재호출**
   - **의도 누락(주관)이 *유일한* FAIL 사유**: 자동 재시도하지 않는다. AskUserQuestion으로 해당 의도 항목을 보여주고 분기 (예외 confirm) — `재시도 / 수용(③로) / 종료`. 재시도 선택 시에만 영향 태스크 `failed` → round +1 재호출
@@ -283,8 +283,8 @@ Max Rounds 모두 FAIL이면 AskUserQuestion으로 4지선다:
 1. @context-doc-updater를 `mode: propose`로 호출. prompt에 주입:
    - `targets`: `docs/` 내 문서들 — clarify `## 참조 컨텍스트 문서`에 기록된 문서 우선. `docs/` 부재 시 targets 생략 (에이전트가 후보 발굴, 새 문서 생성 제안 가능)
    - `session_context`: 이번 사이클 요약 — clarify 요지, plan 채택 설계, generate/evaluate에서 드러난 결정·학습
-2. 제안이 있으면 **⑤ 문서 업데이트 승인 게이트** — 제안 본문을 사용자에게 그대로 보여주고 AskUserQuestion으로 적용 범위 confirm (`전체 적용` / `일부만 적용` / `적용 안 함`)
-3. 승인분만 `mode: apply`로 재호출해 적용. 적용된 문서 변경은 메인이 사이클 브랜치에 커밋 — `docs: 컨텍스트 문서 갱신 (task-pipeline)`
+2. 제안이 있으면 **⑤ 문서 업데이트 승인 게이트** — 제안 응답은 Agent 도구 특성상 tool_result로만 들어오므로, 메인이 받은 제안 본문을 그대로 사용자에게 출력해야 화면에 표시된다. 그 본문을 출력한 뒤 AskUserQuestion으로 적용 범위 confirm (`전체 적용` / `일부만 적용` / `적용 안 함`)
+3. 승인분만 `mode: apply`로 재호출해 적용 — `일부만 적용`이면 사용자가 고른 제안 번호만 전달한다(제안마다 번호가 매겨져 있음). 적용된 문서 변경은 메인이 사이클 브랜치에 커밋 — `docs: 컨텍스트 문서 갱신 (task-pipeline)`
 4. 메인이 `.claude/task-pipeline/<ts>/07-context-update.md`에 기록: 제안 요약 · 사용자 결정 · 적용 파일 목록. *"변경 제안 없음"* 응답이면 그 사실만 한 줄 기록하고 게이트는 생략
 
 ## 종료 직전 · tutor (@tutor) — 선택 호출
