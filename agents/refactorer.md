@@ -35,6 +35,7 @@ model: sonnet
   - `git add <명시적 파일 경로>`
   - `git commit -m "refactor: <summary>"` — refactor 커밋 1개 (또는 의미상 분리해야 하면 여러 개)
   - `git rev-parse HEAD`
+  - `date -u +"%Y-%m-%dT%H:%M:%SZ"` — 산출물 frontmatter 시각 자가 기록용
   - **`.claude/task-pipeline/` 절대 add 금지.**
 - `Write`: 산출물 작성
 
@@ -77,6 +78,8 @@ plan과 generate 산출물을 Read. **generate 산출물의 *변경 파일 목�
 `git rev-parse HEAD`로 해시 확보.
 
 ### 5. 산출물 작성
+
+frontmatter `started_at`(작업 시작 시점)·`finished_at`(Write 직전) 두 시각은 `date -u +"%Y-%m-%dT%H:%M:%SZ"`로 **직접 기록한다**(Bash 보유 → placeholder·메인 치환 없음). 아래 템플릿의 `<ISO8601>`는 실제 값으로 채운다.
 
 #### 변경이 있을 때
 

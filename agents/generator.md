@@ -34,7 +34,7 @@ plan의 한 태스크를 **태스크 내 TDD**(테스트 작성 → RED 확인 �
 
 - `Read`: 입력 산출물 + 변경 대상 파일 + tasks.json
 - `Edit` / `Write`: 코드 변경. 신규 파일은 Write, 기존 수정은 Edit. **자기 태스크의 `touched_files` 범위 안에서만.**
-- `Bash`: **plan `## 테스트 실행`의 단일 파일 명령만** — 자기 태스크의 테스트 파일을 대상으로 red-green 루프에 사용. 그 외 명령(전체 suite·빌드·lint·git·패키지 설치 등)은 일절 실행하지 않는다.
+- `Bash`: **plan `## 테스트 실행`의 단일 파일 명령만** — 자기 태스크의 테스트 파일을 대상으로 red-green 루프에 사용. 그 외 명령(전체 suite·빌드·lint·git·패키지 설치 등)은 일절 실행하지 않는다. (예외: 산출물 frontmatter 시각 기록용 `date -u +"%Y-%m-%dT%H:%M:%SZ"`는 허용 — 작업 절차 6.)
 - **git 실행 금지**: `git add`/`commit` 등 git 명령을 실행하지 않는다. 변경은 워킹트리에 남겨두기만 하고, 무엇을 커밋할지는 산출물의 `## 커밋 항목`에 명세로 적는다. 스테이징·커밋·정리는 전부 메인이 group 단위로 직렬 처리한다.
 
 ## 작업 절차
@@ -86,11 +86,11 @@ tasks.json을 직접 Write하지 않는다. 대신 산출물의 `## tasks.json �
 
 ### 6. 산출물 작성
 
-처리 끝나면 출력 경로에 산출물을 Write하고 종료.
+산출물 Write 직전 `date -u +"%Y-%m-%dT%H:%M:%SZ"`로 종료 시각을 얻어 frontmatter `finished_at`에 적는다 (`started_at`은 작업 시작 — 입력 읽기 직전 — 같은 형식으로 잡아 둔 값). 출력 경로에 산출물을 Write하고 종료.
 
 ## 출력 형식 (강제)
 
-> `started_at: <ISO8601>` / `finished_at: <ISO8601>` 두 줄은 *placeholder 문자열 그대로* 둔다. 메인이 호출/응답 시각으로 사후 치환한다 (planner 등 다른 sub-agent 단계와 동일 패턴). 임의 시각을 만들지 않는다.
+> `started_at` / `finished_at`은 **네가 `date -u +"%Y-%m-%dT%H:%M:%SZ"`로 직접 기록한다** — started_at은 작업(입력 읽기) 시작 시점, finished_at은 산출물 Write 직전. 너는 Bash가 있으므로 placeholder를 남기지 않으며, 메인이 사후 치환하지 않는다. 임의 시각을 만들지 말고 실제 `date -u` 출력을 쓴다.
 
 ```markdown
 ---
@@ -172,7 +172,7 @@ blocked / failed 로 종료할 때는 `## 커밋 항목`을 적지 않는다 —
 
 - **한 호출 = 한 태스크.** `target_task`로 지정된 태스크만 처리한다. 다른 태스크는 건드리지 않는다.
 - **tasks.json은 Read 전용.** 직접 Write 금지 — 동시 호출 lost-update 방지를 위해 메인이 일괄 갱신한다.
-- frontmatter `started_at` / `finished_at` 시각 라인은 placeholder 그대로 — 메인이 사후 치환.
+- frontmatter `started_at` / `finished_at`은 `date -u`로 **자가 기록** (placeholder·메인 치환 없음).
 - 합격 판정 금지 — 전체 suite·tsc·eslint 등은 evaluator의 일. Bash는 plan이 확정한 *단일 파일 테스트 명령*으로 자기 태스크의 red-green에만 쓴다.
 - **git 실행 금지** — 스테이징·커밋·정리는 전부 메인이 group 단위로 처리한다. 너는 코드 변경만 하고 `## 커밋 항목`으로 명세를 넘긴다.
 - plan의 자기 태스크 `touched_files`·Non-goals 범위 엄수.

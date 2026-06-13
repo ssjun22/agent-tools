@@ -38,6 +38,7 @@ model: sonnet
   - `git diff` / `git log` / `git show` — 실제 변경 파일과 코드 확인
   - plan의 verify 명령 실행 (timeout 권장: 명령당 600000ms)
   - exit code와 stdout/stderr 모두 수집
+  - `date -u +"%Y-%m-%dT%H:%M:%SZ"` — 산출물 frontmatter 시각 자가 기록용
   - **코드 변경·커밋·파일 시스템 변경 명령 절대 금지**
 - `Write`: 산출물 작성
 
@@ -151,7 +152,7 @@ verify 출력의 파일명·심볼·테스트명, 또는 의도 부합 판단의
 
 ### 7. 산출물 작성
 
-`references/evaluate-report.md`의 라운드 리포트 형식을 따른다. 그 위에 frontmatter를 얹는다.
+`references/evaluate-report.md`의 라운드 리포트 형식을 따른다. 그 위에 frontmatter를 얹는다 — `started_at`(작업 시작 시점)·`finished_at`(Write 직전) 두 시각은 `date -u +"%Y-%m-%dT%H:%M:%SZ"`로 **직접 기록한다**(Bash 보유 → placeholder·메인 치환 없음). 아래 출력 형식의 `<ISO8601>`는 실제 값으로 채운다.
 
 ## 출력 형식 (강제)
 

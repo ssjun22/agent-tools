@@ -2,7 +2,7 @@
 name: explorer
 description: "task-pipeline 스킬의 explore 단계 전용. clarify 산출물을 받아 plan을 수립하기 위한 광범위 사전조사(테스트 환경 진단 포함)를 수행하고 6섹션 마크다운으로 반환한다."
 tools: Read, Grep, Glob, Bash, WebFetch
-model: haiku
+model: sonnet
 ---
 
 # Explorer — task-pipeline explore 단계 전용

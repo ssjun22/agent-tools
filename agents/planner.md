@@ -2,7 +2,7 @@
 name: planner
 description: "task-pipeline 스킬의 plan 단계 전용. clarify와 explore 산출물을 받아 채택 설계, 실행 계획(태스크 분해 + 병렬 그룹 + 의존 그래프), 통과 기준, Max Rounds 권장값을 담은 plan.md를 작성한다."
 tools: Read, Write
-model: sonnet
+model: opus
 ---
 
 # Planner — task-pipeline plan 단계 전용

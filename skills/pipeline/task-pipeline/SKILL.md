@@ -48,6 +48,8 @@ mkdir -p "$TASK_PIPELINE_DIR"
 
 `.gitignore`에 `.claude/task-pipeline/` 누락 시 사용자에게 추가 권장 (자동 수정 안 함).
 
+**결정론 헬퍼**: 기계적 작업 중 leak이 입증됐거나 JSON 수기 편집이 위험한 부분은 메인이 손으로 하지 않고 `scripts/cycle.sh`로 실행한다 — `doctor`(archive 전 상태 검증)와 `task-update`(tasks.json 안전 변이). 경로는 전 레포 공통 심링크 기준 `.claude/skills/task-pipeline/scripts/cycle.sh` (부재 시 절대경로 `/Users/choiyoungjun/agent-tools/skills/pipeline/task-pipeline/scripts/cycle.sh`).
+
 각 단계 진입 시 1줄 헤더로 위치를 알린다:
 
 ```
@@ -74,6 +76,8 @@ sub-agent 종료 직후 메인은 산출물 frontmatter `status` 한 필드를 �
 | `failed` | retry 없이 즉시 사용자 알림, `current_step=failed` 종료 |
 
 예외 — 산출물을 디스크에 쓰지 않는 sub-agent는 응답 첫 줄 `Status:`로 같은 신호를 보낸다: explorer는 항상(메인이 응답을 받아 frontmatter를 얹어 Write — Step 2 참조), planner는 시스템 에러 시(`Status: failed — <사유>` 한 줄만 응답, 산출물 없음).
+
+**시각 기록 주체**: Bash를 가진 generator·refactorer·evaluator는 자기 산출물 frontmatter의 `started_at`/`finished_at`을 `date -u`로 **직접 기록**한다 (메인이 사후 치환하지 않음 — 시각 미치환 leak의 근원 제거). Bash 없는 planner와, 메인이 frontmatter를 얹는 explore·clarify만 메인이 실제 시각을 적는다.
 
 단계와 무관하게 사용자가 *"취소 / 멈춰 / 그만"* 등 명시 발화를 하면 `current_step=cancelled`로 사이클을 종료한다.
 
@@ -120,7 +124,7 @@ clarify 산출물 본문: <메인이 위 파일 내용을 인라인으로 주입
 디스크에 쓰지 말고 단일 메시지로 반환.
 ```
 
-explorer 응답 수신 후 메인이 frontmatter를 얹어 `.claude/task-pipeline/<ts>/02-explore.md`에 Write. `status`는 explorer 응답 첫 줄의 `Status:` 값(`completed`/`blocked`/`cancelled`)을 그대로 매핑한다 — `blocked`/`cancelled`면 본문은 6섹션 대신 해당 섹션(`## Blocker`/`## Cancellation`)만 오며, 공통 규약대로 분기한다:
+explorer 응답 수신 후 메인이 frontmatter를 얹어 `.claude/task-pipeline/<ts>/02-explore.md`에 Write. `started_at`/`finished_at`은 메인이 explorer 호출·응답 시각을 실제 ISO8601로 적는다 (explorer는 frontmatter를 메인이 얹으므로 자가 기록 대상 아님). `status`는 explorer 응답 첫 줄의 `Status:` 값(`completed`/`blocked`/`cancelled`)을 그대로 매핑한다 — `blocked`/`cancelled`면 본문은 6섹션 대신 해당 섹션(`## Blocker`/`## Cancellation`)만 오며, 공통 규약대로 분기한다:
 
 ```yaml
 ---
@@ -149,18 +153,24 @@ explore 산출물: .claude/task-pipeline/<ts>/02-explore.md
 
 planner가 채택 설계 + 태스크 분해 + verify 명령 + Non-goals + 위험 + Max Rounds 권장값을 작성. 추가로 plan 본문 상단에 **작업 유형**(`feat` / `fix` / `refactor` / `chore` / `docs` / `test` 중 하나)을 한 줄로 명시한다 — 메인이 브랜치명 prefix로 사용한다. explore `## 테스트 환경`을 받아 `## 테스트 실행`(단일 파일 명령 패턴 + 전체 suite 명령, 면제 사이클이면 사유)으로 확정하고, **각 코드 태스크에 테스트 파일(touched_files)과 테스트할 동작을 내장**한다 — generator의 TDD 루프가 이를 그대로 따른다.
 
-planner는 시각을 알 수 없으므로 frontmatter의 `started_at` / `finished_at`을 `<ISO8601>` placeholder로 둔다. 메인은 sub-agent 종료 직후 호출 시각·응답 시각을 실제 ISO8601로 산출물에서 치환한다 (explore 등 다른 sub-agent 단계와 동일 패턴).
+planner는 Bash가 없어 시각을 알 수 없으므로 frontmatter의 `started_at` / `finished_at`을 `<ISO8601>` placeholder로 둔다. 메인이 plan 종료 직후 호출·응답 시각을 실제 ISO8601로 치환한다 (Bash 없는 planner와, frontmatter를 메인이 얹는 explore·clarify만 메인 담당 — generator·refactorer·evaluator는 자가 기록하므로 치환 불필요).
 
 종료 후 메인이:
 
 1. `tasks.json` 초기화 — `templates/tasks.template.json`을 cp하면 `{"tasks": []}` 빈 배열로 시작한다. 메인이 plan의 각 태스크에 대해 `references/state-files.md`의 tasks 객체 스키마를 따라 새 객체를 만들어 배열에 push한다 (`id`/`title`/`group`/`stage`/`touched_files`/`depends_on`은 plan에서 채우고, `status`는 `pending`, `commit`/`started_at`/`finished_at`은 `null`).
 2. 브랜치명 제안 — clarify Understanding Summary 첫 bullet에서 slug 추출(영문 kebab-case, 최대 30자), plan 본문 상단의 **작업 유형** prefix와 결합. 패턴: `<type>/<slug>` (예: `feat/home-screen-scaffold`, `refactor/components-extract`). plan에 작업 유형이 없거나 모호하면 `feat`로 기본 적용.
 3. ② Plan 확인 게이트 — planner 산출물은 디스크에만 있으므로, 메인이 plan 본문(채택 설계·태스크 분해·verify·Max Rounds)과 제안 브랜치명을 화면에 먼저 출력한 뒤 AskUserQuestion으로 confirm한다 (출력하지 않으면 사용자는 무엇을 확인하는지 못 본다). 사용자가 `브랜치명 변경`을 선택하면 메인이 자유 텍스트로 입력 받아 검증(`^[a-z0-9][a-z0-9/_-]{0,63}$`) 후 그 값을 사용한다.
-4. confirm 후 브랜치 생성 전 git preflight를 수행.
-   - `git rev-parse --is-inside-work-tree`가 실패하면 `current_step=failed`로 종료. task-pipeline는 태스크별 commit을 전제로 하므로 비-git 디렉토리에서는 진행하지 않는다.
-   - `git status --porcelain -- ':!.claude/task-pipeline'`로 작업트리를 확인한다. 기존 변경이 있으면 브랜치를 만들지 않고 사용자에게 commit/stash/중단 중 하나를 요청한다.
-   - `git show-ref --verify --quiet refs/heads/<branch>`로 같은 이름의 로컬 브랜치가 있는지 확인한다. 이미 있으면 사용자에게 다른 브랜치명 입력을 요청한다.
-5. preflight 통과 후 `git checkout -b <branch>` 실행.
+4. confirm 후 브랜치 생성 전 git preflight를 **다음 블록 그대로** 실행한다 (세 검사를 빠짐없이 — 즉흥 조합 금지). `<branch>`만 확정 브랜치명으로 치환:
+
+   ```bash
+   b="<branch>"
+   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "NOT_GIT"; exit 1; }
+   [ -z "$(git status --porcelain -- ':!.claude/task-pipeline')" ] || { echo "DIRTY"; exit 1; }
+   git show-ref --verify --quiet "refs/heads/$b" && { echo "BRANCH_EXISTS"; exit 1; }
+   git checkout -b "$b" && echo "OK"
+   ```
+
+   출력 토큰으로 분기: `NOT_GIT` → task-pipeline는 태스크별 commit을 전제로 하므로 비-git 디렉토리에서 진행 안 함, `current_step=failed` 종료. `DIRTY` → 브랜치 만들지 않고 사용자에 commit/stash/중단 요청. `BRANCH_EXISTS` → 다른 브랜치명 요청. `OK` → 브랜치 생성 완료.
 
 ## Step 4 · generate (@generator)
 
@@ -172,7 +182,7 @@ for stage in plan.stages:
     for t in targets:
         invoke @generator(target_task=t)  ← multiple tool calls 한 메시지로
     wait_all()
-    후처리(메인, 직렬): 시각 치환 → 실패 태스크 워킹트리 정리 → group별 커밋 → tasks.json 일괄 갱신
+    후처리(메인, 직렬): 실패 태스크 워킹트리 정리 → group별 커밋 → tasks.json 갱신(pipeline task-update)
     if any failed/blocked: break
 ```
 
@@ -198,17 +208,23 @@ generator는 단일 태스크의 코드 변경만 하고 **커밋하지 않는�
 
 동시 호출 안전성: 같은 stage의 태스크들은 plan에서 `touched_files`가 겹치지 않음이 보장돼 동시 *파일 편집*은 안전하다(서로 다른 파일). git을 만지는 주체는 메인 하나뿐이므로 index.lock 경합·교차오염이 원천 차단된다. generator는 자신의 `touched_files` 외 파일에 write 시도 시 `blocked`로 종료.
 
-각 인스턴스 종료 후, 메인은 산출물 frontmatter status를 분기 판단하기 *전에* 다음 후처리를 **직렬로** 수행한다 (동시 갱신 lost-update·git 경합 방지):
+각 인스턴스 종료 후, 메인은 산출물 frontmatter status를 분기 판단하기 *전에* 다음 후처리를 **직렬로** 수행한다 (동시 갱신 lost-update·git 경합 방지). generator는 자기 산출물의 시각을 자가 기록하므로 **메인의 시각 치환 단계는 없다**:
 
-1. **시각 치환**: 각 산출물의 `started_at` / `finished_at` placeholder를 호출/응답 ISO8601로 치환.
-2. **실패 태스크 워킹트리 정리**: `blocked` / `failed` 인스턴스(= `## 커밋 항목` 없음)의 미커밋 변경을 `git checkout -- <touched_files>`로 reset. 다음 단계(커밋·refactor)에 잔존물이 섞이지 않도록 **커밋 전에** 정리한다.
-3. **group별 커밋**: 같은 stage에서 `completed`로 끝난 태스크들의 `## 커밋 항목`을 *group ID별로 묶어*, group마다 1커밋을 메인이 직렬 생성한다.
+1. **실패 태스크 워킹트리 정리**: `blocked` / `failed` 인스턴스(= `## 커밋 항목` 없음)의 미커밋 변경을 `git checkout -- <touched_files>`로 reset. 다음 단계(커밋·refactor)에 잔존물이 섞이지 않도록 **커밋 전에** 정리한다.
+2. **group별 커밋**: 같은 stage에서 `completed`로 끝난 태스크들의 `## 커밋 항목`을 *group ID별로 묶어*, group마다 1커밋을 메인이 직렬 생성한다.
    - `git add -- <그 group 태스크들의 touched_files 전부>` 후 `git commit`.
    - 메시지 — round 1: subject `<type>(<group>): <plan의 group 제목>`, 본문은 각 태스크 summary를 bullet로. type·group 제목은 plan을 source of truth로 한다(섞이면 plan의 group type 우선).
    - retry(round ≥2): 해당 group에서 이번에 재처리된 태스크만 묶어 `fix(<group>): <retry 사유>` **새 커밋**(amend 없음).
    - group의 일부 태스크만 성공했으면 성공분만 묶어 커밋하고, 실패분은 다음 round fix 커밋으로.
    - 각 커밋 후 `git rev-parse HEAD`로 해시를 받아둔다.
-4. **tasks.json 일괄 갱신**: 같은 stage 모든 인스턴스의 `## tasks.json 갱신 요청`을 모아, 메인이 *단일 프로세스*로 tasks.json을 Read → status 전이 + 3에서 받은 **group 커밋 해시**(같은 group 태스크는 같은 해시) + 시각을 한 번에 적용 → Write.
+3. **tasks.json 갱신 (수기 편집 금지 — `cycle.sh task-update` 사용)**: 같은 stage 각 `completed` 인스턴스의 `## tasks.json 갱신 요청`을 읽어, 태스크마다 헬퍼를 호출한다 — status 전이 + 2에서 받은 **group 커밋 해시**(같은 group 태스크는 같은 해시) + finished_at을 한 번에 적용. 예:
+
+   ```bash
+   bash .claude/skills/task-pipeline/scripts/cycle.sh task-update \
+     .claude/task-pipeline/<ts>/tasks.json T2 --status done --commit <group해시> --finished "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+   ```
+
+   blocked/failed 태스크는 generator가 전이를 요청하지 않으므로 건너뛴다 (사용자 결정 후 처리).
 
 후처리 후 frontmatter status로 분기:
 
@@ -307,7 +323,13 @@ tutor는 디렉토리 안의 산출물 중 필요한 것만 골라 Read하고, `
 
 ## 종료 처리
 
-archive 처리 (tutor 호출 여부와 무관):
+**archive 전 상태 검증** — `doctor`로 placeholder 미치환·시각 역전·tasks.json 스키마를 점검한다. 문제가 보고되면 archive를 멈추고 메인이 해소(주로 placeholder 치환·시각 보정) 후 재실행한다 (깨진 상태가 archived/에 굳는 걸 막음):
+
+```bash
+bash .claude/skills/task-pipeline/scripts/cycle.sh doctor .claude/task-pipeline/<ts>
+```
+
+archive 처리 (doctor 통과 후, tutor 호출 여부와 무관):
 
 - `done` (③ 검수 OK): `mv .claude/task-pipeline/$TS .claude/task-pipeline/archived/` + 메인이 "현재 브랜치: <branch>. PR/머지는 별도로 진행하세요" 안내
 - `cancelled` / `failed` / `handoff`: 동일하게 archived/로 이동, 브랜치는 그대로 둠
