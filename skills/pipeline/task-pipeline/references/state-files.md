@@ -11,11 +11,7 @@
 
 `<ts>` = ISO8601 변형 — 콜론을 하이픈으로 (파일시스템 호환). 예: `2026-05-07T14-30-22`.
 
-```bash
-TS=$(date -u +"%Y-%m-%dT%H-%M-%S")
-TASK_PIPELINE_DIR=".claude/task-pipeline/$TS"
-mkdir -p "$TASK_PIPELINE_DIR"
-```
+디렉토리 생성·템플릿 cp·placeholder 치환은 `scripts/state.sh init "<request>"`가 한 번에 수행한다 (메인이 손으로 만들지 않는다).
 
 `.claude/task-pipeline/`는 사용자가 `.gitignore`에 추가하기를 권장 (스킬은 자동으로 변경하지 않는다 — 메인이 첫 사이클에서 누락 확인 후 안내).
 
@@ -56,6 +52,7 @@ mkdir -p "$TASK_PIPELINE_DIR"
   "started_at": "2026-05-07T14:30:22Z",
   "request": "사용자가 /task-pipeline 인자로 넘긴 요약",
   "branch": "feat/<slug>",
+  "base_commit": "<preflight가 기록한 브랜치 생성 직후 HEAD>",
   "current_step": "clarify | explore | plan | generate | refactor | evaluate | done | handoff | cancelled | failed",
   "max_rounds": 3,
   "current_round": 1,
@@ -79,14 +76,20 @@ mkdir -p "$TASK_PIPELINE_DIR"
 
 `current_step`은 마지막 활성 단계 또는 종료 상태(`done` / `handoff` / `cancelled` / `failed`).
 
-`branch`는 plan 확정 후 메인이 생성한 브랜치명 (`<type>/<slug>` — type은 plan의 작업 유형).
+`branch`·`base_commit`은 `git-ops.sh preflight`가 브랜치 생성 직후 기록한다 (`<type>/<slug>` — type은 plan 개요의 유형 값). base_commit은 evaluate 2-B diff 기준으로 매 라운드 주입된다. base가 디스크에 남으므로 resume 후에도 유효하다 — `preflight`는 멱등이라, 브랜치는 만들어졌는데 기록 전 중단된 경우(현재 그 브랜치 위·progress 미기록) 재실행하면 base=HEAD로 조정한다.
 
 ## tasks.json
 
-plan 태스크의 진행 상태 + 커밋 해시 매핑. 초기 생성은 `templates/tasks.template.json`을 cp하면 `{"tasks": []}` 빈 배열로 시작 — 메인이 plan 태스크별로 객체를 만들어 push (객체 스키마는 아래 본문).
+plan 태스크의 진행 상태 + 커밋 해시 매핑. 초기 생성은 `state.sh tasks-init <cycle_dir>` — plan 산출물의 ```json tasks 블록(groups+tasks)을 추출·검증(스키마 + 같은 stage 내 touched_files 비겹침)해 생성한다. 메인이 산문 plan을 번역해 push하지 않는다.
+
+최상위 `groups` 배열이 group 메타(커밋 subject의 제목·type 원천)를 담는다 — `git-ops.sh commit-group`이 여기서 subject를 조립한다:
 
 ```json
 {
+  "groups": [
+    { "id": "A", "title": "의존성 설치", "type": "chore" },
+    { "id": "B", "title": "스키마 정의", "type": "feat" }
+  ],
   "tasks": [
     {
       "id": "T1",
@@ -180,9 +183,11 @@ finished_at: 2026-05-07T14:35:11Z
 
 ### tasks.json
 
-> status 전이는 generator가 산출물 `## tasks.json 갱신 요청`으로 *요청*하고, commit 해시·시각은 메인이 group 커밋 후 *채운다*. 실제 tasks.json Write는 항상 메인이 직렬로 일괄 처리한다 (동시 lost-update 방지).
+> status 전이·commit 해시·시각 기록은 `git-ops.sh commit-group`이 커밋과 원자적으로 수행한다 (내부에서 `state.sh task-update` 호출 — 판정 원천은 generate 산출물 frontmatter status). 그 외 개별 갱신도 항상 `state.sh task-update` 경유 — 수기 JSON 편집 금지. Write가 스크립트 직렬 실행이므로 동시 lost-update가 없다.
+>
+> `commit-group`은 멱등이다 — 커밋은 성공했으나 tasks.json 기록 전 세션이 끊긴 반쪽 상태에서 재실행하면, 스테이징할 변경이 없음을 감지해 새 커밋을 만들지 않고 기존 HEAD 커밋으로 tasks.json을 조정한다. 덕분에 resume 시 판별은 `inspect.sh tasks`(태스크별 status·commit)로, 복구는 `commit-group` 재실행으로 닫힌다 — resume 프로토콜은 SKILL.md 참조.
 
-- 태스크 완료 (generator 요청 → 메인 적용): `pending → done`. 메인이 group 커밋 해시·finished_at을 채움
+- 태스크 완료 (메인이 frontmatter에서 도출해 적용): `pending → done`. 메인이 group 커밋 해시·finished_at을 채움
 - evaluate 라운드 FAIL시 영향 태스크 (메인): `done → failed` (영향 태스크 추정 가능 시에만)
 - 다음 라운드 generate 재진입: `failed → done`. 메인이 그 group의 fix 커밋 해시로 해당 태스크 commit 갱신
 - ④ 분기 "재시도 (라운드 리셋)" 선택 시 (메인): 모든 태스크 `done|failed → pending`, started_at/finished_at null로 리셋. commit 필드는 유지 — 과거 커밋은 git history에 그대로 남고 추적용으로 보존
@@ -196,9 +201,6 @@ finished_at: 2026-05-07T14:35:11Z
 - `cancelled`
 - `failed`
 
-```bash
-mkdir -p .claude/task-pipeline/archived
-mv .claude/task-pipeline/$TS .claude/task-pipeline/archived/
-```
+이동은 `state.sh archive <cycle_dir> <final_step>` — doctor 검증이 내장되어 통과해야만 mv된다 (`inspect.sh doctor` 단독 실행은 read-only 점검용).
 
-archived/는 사용자가 직접 정리. 스킬은 자동 정리하지 않는다.
+archived/는 사용자가 직접 정리. 스킬은 자동 정리하지 않는다. `inspect.sh stats`가 archived/를 집계해 Round 1 PASS율·종료 상태 분포를 보고한다.

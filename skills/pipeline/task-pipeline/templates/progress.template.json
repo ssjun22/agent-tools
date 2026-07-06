@@ -2,6 +2,7 @@
   "started_at": "__ISO8601__",
   "request": "__USER_REQUEST__",
   "branch": null,
+  "base_commit": null,
   "current_step": "clarify",
   "max_rounds": null,
   "current_round": null,
