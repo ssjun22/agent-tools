@@ -16,15 +16,14 @@ argument-hint: <plugin-name> <repo-alias>
 /agent-plugin-manager <plugin-name> <repo-alias>
 ```
 
-- `$0` — 플러그인명 (예: `handoff`, `project-context`)
+- `$0` — 플러그인명 (예: `karpathy-coding-guide`)
 - `$1` — 대상 레포지토리 alias (예: `my-app`, `my-service`)
 
 인자가 2개 모두 전달되면 validate → dry-run → apply 워크플로우를 바로 실행합니다.
 인자가 없거나 부족하면 대화형으로 확인합니다.
 
 **예시:**
-- `/agent-plugin-manager project-context my-app` — project-context 플러그인을 my-app에 적용
-- `/agent-plugin-manager handoff my-service` — handoff 플러그인을 my-service에 적용
+- `/agent-plugin-manager karpathy-coding-guide my-app` — karpathy-coding-guide 플러그인을 my-app에 적용
 
 ## Overview
 
@@ -65,8 +64,8 @@ Plugins do NOT contain `rules/`, `skills/`, `agents/`, or `hooks/` directories. 
   "depends": {
     "skills": ["dev/code-reviewer", "dev/git-commit-helper"],
     "agents": ["code-reviewer", "researcher"],
-    "rules": ["handoff", "project-context"],
-    "hooks": ["load-context", "save-context"]
+    "rules": ["karpathy-skills"],
+    "hooks": []
   }
 }
 ```
@@ -106,17 +105,12 @@ python3 scripts/list_plugins.py
 
 **Example output:**
 ```
-Found 4 plugin(s):
+Found 1 plugin(s):
 
-📁 handoff
-   Path: /path/to/plugins/handoff
+📁 karpathy-coding-guide
+   Path: /path/to/plugins/karpathy-coding-guide
    README: ✓  plugin.json: ✓  settings: ✗
-   Depends: 1 agents, 1 rules, 1 hooks
-
-📁 project-context
-   Path: /path/to/plugins/project-context
-   README: ✓  plugin.json: ✓  settings: ✓
-   Depends: 1 skills, 1 rules, 2 hooks
+   Depends: 1 skills, 1 rules
 ```
 
 ### 3. Validate Plugin
@@ -143,10 +137,9 @@ plugin.json: ✓
 README.md: ✓
 settings.json: — (not present)
 
-Dependencies (3 total):
-  agents/handoff-creator: ✓ (agents/handoff-creator.md)
-  rules/handoff: ✓ (rules/handoff.md)
-  hooks/load-handoffs: ✓ (hooks/load-handoffs)
+Dependencies (2 total):
+  skills/dev/karpathy-guidelines: ✓ (skills/dev/karpathy-guidelines/)
+  rules/karpathy-skills: ✓ (rules/karpathy-skills.md)
 ```
 
 ### 4. Apply Plugin to Repository
@@ -188,16 +181,15 @@ python3 scripts/apply_to_repo.py --list-repos
 
 **Example output:**
 ```
-🚀 Applying plugin 'handoff' to: /path/to/project
+🚀 Applying plugin 'karpathy-coding-guide' to: /path/to/project
 
 📋 Resolving dependencies...
-  ✅ agents/handoff-creator — already exists, skip
-  🔗 rules/handoff → symlinked
-  🔗 hooks/load-handoffs → symlinked
+  ✅ skills/karpathy-guidelines — already exists, skip
+  🔗 rules/karpathy-skills → symlinked
 
 ──────────────────────────────────────────────────
 ✅ Done!
-   Linked:  2 file(s)
+   Linked:  1 file(s)
    Skipped: 1 file(s)
 ```
 
