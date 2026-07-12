@@ -4,16 +4,12 @@
 [ -n "${TP_LIB_LOADED:-}" ] && return 0
 TP_LIB_LOADED=1
 
-# ── enum (원천: references/state-files.md) ──────────────────────────────────
-TASK_STATUS_ENUM="pending in_progress done failed skipped"
-STAGE_STATUS_ENUM="completed blocked cancelled failed"
-STEP_NAME_ENUM="clarify explore plan generate refactor evaluate"
-FINAL_STEP_ENUM="done handoff cancelled failed"
-
 # ── 출력 규약 ────────────────────────────────────────────────────────────────
-# 마지막 줄 = 단일 기계 토큰. exit 0=정상 / 1=검증 실패 / 2=사용법 오류.
+# 마지막 줄 = 단일 기계 토큰. exit 2=사용법 오류(die) / 1=전제 미충족·거부(fail)
+# / 0=정상 완료. verify는 PASS·FAIL·ERROR·LIMIT 모두 토큰으로 알리고 exit 0 —
+# 호출부는 exit code가 아니라 마지막 줄 토큰을 읽는다.
 die()  { echo "error: $*" >&2; exit 2; }   # 사용법 오류 (호출부 잘못)
-fail() { echo "$*"; exit 1; }              # 검증 실패 (토큰으로 종료)
+fail() { echo "$*"; exit 1; }              # 전제 미충족·거부 (토큰으로 종료)
 
 need_jq() { command -v jq >/dev/null 2>&1 || die "jq 없음 — task-pipeline 헬퍼에 필요"; }
 iso_now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
@@ -41,18 +37,7 @@ jq_inplace() { # jq_inplace <file> <jq-args...>
   jq "$@" "$f" > "$tmp" && mv "$tmp" "$f"
 }
 
-# .claude/task-pipeline/ 하위 경로가 섞여 있으면 1 (git 대상 방어)
-has_pipeline_path() { # has_pipeline_path <files...>
-  local p
-  for p in "$@"; do
-    case "$p" in .claude/task-pipeline/*|*/.claude/task-pipeline/*) return 0 ;; esac
-  done
-  return 1
-}
-
-# cycle_dir 존재 + 내부 JSON 경로 헬퍼
+# cycle_dir 존재 확인
 require_cycle_dir() { # require_cycle_dir <dir>
   [ -d "$1" ] || die "사이클 디렉토리 없음: $1"
 }
-tasks_json()    { echo "$1/tasks.json"; }
-progress_json() { echo "$1/progress.json"; }
