@@ -101,6 +101,12 @@ def get_daily_paths(config_path="config.json"):
     daily_notes = config["daily_notes_path"]
     project_sections = normalize_project_sections(config.get("project_sections"))
 
+    # Backlog file path (default: <daily_notes_path>/Backlogs.md, relative to vault)
+    backlog_rel = config.get("backlog_path") or f"{daily_notes}/Backlogs.md"
+    backlog_path = Path(backlog_rel).expanduser()
+    if not backlog_path.is_absolute():
+        backlog_path = vault_path / backlog_rel
+
     # Calculate dates
     today = datetime.now()
     yesterday = today - timedelta(days=1)
@@ -150,6 +156,10 @@ def get_daily_paths(config_path="config.json"):
             "date": recent_date,
             "path": recent_file,
             "exists": recent_file is not None
+        },
+        "backlog": {
+            "path": str(backlog_path),
+            "exists": backlog_path.exists()
         },
         "config": {
             "project_sections": project_sections

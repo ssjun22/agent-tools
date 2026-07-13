@@ -1,5 +1,6 @@
 {
   "vault_path": "/Users/username/Documents/Obsidian Vault",
   "daily_notes_path": "Daily Notes",
-  "project_sections": ["프로젝트A", "프로젝트B", "기타"]
+  "project_sections": ["프로젝트A", "프로젝트B", "기타"],
+  "backlog_path": "Daily Notes/Backlogs.md"
 }
