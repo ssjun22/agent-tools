@@ -35,6 +35,7 @@ disable-model-invocation: true
 
 ## 금지
 - **동결 수정** — ① 이후 brief·plan을 고치지 않는다. 전제 오류는 journal 기록 + blocked.
+- **재확인 없는 진행** — 사람 확인은 제시한 판본에 귀속. 확인 후 brief·plan이 바뀌면 변경점 재제시 + 재판정이 먼저다. 수정 지시를 승인으로 치환 금지.
 - **자가 판정** — 판정은 `core.sh verify`(기계)와 게이트(사람). 자가 평가 retry 루프 금지.
 - **raw git / 수기 상태 편집** — git 쓰기·state.json 변이는 `core.sh` 경유가 유일.
 - **요약 인계** — 컨텍스트는 항상 경로로 넘긴다.
