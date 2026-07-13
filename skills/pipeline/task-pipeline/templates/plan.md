@@ -52,7 +52,7 @@ json steps 필드:
   files      : write 소유 파일 — 순수 경로만((new) 등 주석 금지)
   depends_on : 선행 걸음 id 배열 (웨이브는 여기서 파생)
   check      : `core.sh verify --step`이 실행할 걸음 확인 명령(라운드 미카운트)
-  human_check: 사람 검수 항목(기계 판정 불가)
+  human_check: 사람 검수 항목(기계 판정 불가) + 확인 방법 — ① lock `--check "항목 :: 방법"`으로 승격
   grounds    : 이 걸음이 담당하는 brief ID(G-/C-)
 걸음마다 check 또는 human_check 중 최소 하나는 있어야 한다(① lock에서 래퍼가 검증).
 -->

@@ -9,19 +9,25 @@
 #   - verify·commit은 ① lock 후 · close 전에만 (라이프사이클 가드).
 #   - lock이 brief·plan sha256을 동결 — 이후 드리프트는 FROZEN_DRIFT 거부.
 #   - 라운드 = 최종 검증 FAIL 누적. PASS·ERROR는 상한을 소모하지 않는다.
+#   - close done은 최종 검증 PASS를 요구한다 (NOT_PASS 거부).
+#   - handoff.md는 close 후 유일 가변 파일 — 연산은 consume(상태 전이) 하나, 래퍼 경유.
 #
 # 저장소: ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
-#   state.json · journal.md · brief.md · plan.md · verify/
+#   state.json · journal.md · brief.md · plan.md · handoff.md · verify/
 #
 # usage:
 #   core.sh new "<request>"                          → OK <cycle_dir>
-#   core.sh status [<cycle_dir>]                     → 활성 사이클 요약 / 특정 사이클 상태
+#   core.sh status [<cycle_dir>]                     → 활성 사이클 요약 + 미소진 handoff
 #   core.sh log <cycle_dir> --actor <a> --tag <t> -m "<msg>"
 #   core.sh step phase   <cycle_dir> <phase>
-#   core.sh step lock    <cycle_dir> --verify "<cmd>" --max <N> [--branch <name>] [--check "<항목>"]...
+#   core.sh step lock    <cycle_dir> --verify "<cmd>" --max <N> [--branch <name>] [--check "<항목> :: <확인 방법>"]...
 #   core.sh verify       <cycle_dir> [--step <S-n>]  → PASS|FAIL|ERROR|LIMIT
 #   core.sh commit       <cycle_dir> <S-n>           → OK <hash> <S-n>
 #   core.sh commit       <cycle_dir> --refactor -m "<summary>" -- <files...>
+#   core.sh report       <cycle_dir>                 → 완료 보고 뷰 (저장 없음, 매번 조합)
+#   core.sh handoff add     <cycle_dir> -m "<제목>" --refs "<출처>" [--why "<배경>"]
+#   core.sh handoff list    <cycle_dir>
+#   core.sh handoff consume <cycle_dir> <H-n> --by <cycle-id>
 #   core.sh close        <cycle_dir> <done|handoff|cancelled|failed>
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -212,7 +218,16 @@ _step_lock() {
     git -C "$root" checkout -q -b "$branch"
   fi
   # 동결: lock 블록(brief·plan sha 포함) + phase=locked + 게이트 ① 기록
-  local checks_json; checks_json="$(printf '%s\n' "${checks[@]:-}" | jq -R . | jq -s 'map(select(length>0))')"
+  # 체크리스트 항목은 "판정 문장 :: 확인 방법(어디를 열어 무엇을 본다)" — 구분자 없으면 how는 빈값
+  local checks_json="[]" c item how
+  for c in "${checks[@]:-}"; do
+    [ -n "$c" ] || continue
+    case "$c" in
+      *" :: "*) item="${c%% :: *}"; how="${c#* :: }" ;;
+      *)        item="$c"; how="" ;;
+    esac
+    checks_json="$(jq -n --argjson a "$checks_json" --arg i "$item" --arg h "$how" '$a + [{item:$i, how:$h}]')"
+  done
   local bsha psha
   bsha="$(_sha256 "$dir/brief.md")"; psha="$(_sha256 "$plan")"
   jq_inplace "$sj" --arg v "$verify" --argjson m "$max" --arg b "$branch" \
@@ -363,9 +378,32 @@ cmd_status() {
     [ "$(jq -r '.final // "null"' "$d/state.json")" = "null" ] || continue
     found+=("${d%/}")
   done
-  if [ "${#found[@]}" -eq 0 ]; then echo "NO_ACTIVE"; return 0; fi
-  echo "OK ${#found[@]}"
-  for d in "${found[@]}"; do _status_one "$d"; done
+  if [ "${#found[@]}" -eq 0 ]; then echo "NO_ACTIVE"; else
+    echo "OK ${#found[@]}"
+    for d in "${found[@]}"; do _status_one "$d"; done
+  fi
+  _status_handoff "$repo_store"
+}
+
+# 미소진 handoff 요약 — 전 사이클(닫힌 것 포함)의 '대기' 항목을 노출
+_status_handoff() { # <repo_store>
+  local store="$1" d hf cid out=""
+  for d in "$store"/*/; do
+    hf="${d}handoff.md"; [ -f "$hf" ] || continue
+    cid="$(basename "${d%/}")"
+    local block
+    block="$(awk -v c="$cid" '
+      function flush(){ if(id!="" && st ~ /^대기/) printf "  %s  %-5s %s\n", c, id, ti }
+      /^## H-/ { flush(); id=$2; ti=$0; sub(/^## H-[0-9]+[ \t]+·[ \t]+/,"",ti); st="?" }
+      /^- 상태:/ { if(st=="?"){ s=$0; sub(/^- 상태:[ \t]*/,"",s); st=s } }
+      END{ flush() }
+    ' "$hf")"
+    [ -n "$block" ] || continue
+    [ -n "$out" ] && out+=$'\n'
+    out+="$block"
+  done
+  [ -n "$out" ] || return 0
+  printf 'HANDOFF %d\n%s\n' "$(printf '%s\n' "$out" | grep -c .)" "$out"
 }
 
 _status_one() {
@@ -417,10 +455,142 @@ cmd_close() {
   in_enum "$final" "$FINAL_ENUM" || fail "BAD_FINAL $final"
   local sj; sj="$(state_json "$dir")"
   [ "$(jq -r '.final // "null"' "$sj")" = "null" ] || fail "ALREADY_CLOSED"
+  # done = 기계 검증 통과가 데이터로 보장된 상태 — 최종 검증 PASS 없이는 거부
+  if [ "$final" = "done" ]; then
+    [ "$(jq -r '.loop.last_verify.token // ""' "$sj")" = "PASS" ] || fail "NOT_PASS"
+  fi
   jq_inplace "$sj" --arg f "$final" --arg t "$(iso_now)" '
     .final=$f | .phase="closed" | .closed_at=$t
     | .gates += [{gate:"③", at:$t, verdict:$f}]'
   echo "OK $final"
+}
+
+# ── report (완료 보고 뷰) ─────────────────────────────────────────────────────
+# 저장하지 않는다 — state.json·verify meta·동결 checklist·handoff 상태를 매번 조합.
+# ③ 검수 재료(close 전)와 사후 감사(close 후)를 같은 명령이 겸한다.
+# 유도 규칙: checklist 항목 중 handoff(관련: checklist:N)로 빠지지 않은 것 = 검수에서 확인.
+cmd_report() {
+  [ $# -eq 1 ] || die "usage: core.sh report <cycle_dir>"
+  need_jq
+  local dir="$1"; require_cycle_dir "$dir"
+  local sj; sj="$(state_json "$dir")"
+  jq -r '"# 완료 보고 — \(.cycle_id) · \(.final // ("진행중: " + .phase))\n요청: \(.request)\n브랜치: \(.lock.branch // "-") · base \(.repo.base_commit[0:7])"' "$sj"
+  echo; echo "## 기계 검증"
+  jq -r '"최종: \(.loop.last_verify.token // "미실행") (\(.loop.last_verify.at // "-") · round \(.loop.round)/\(.loop.max_rounds // "-"))\n  cmd: \(.lock.verify_cmd // "-")"' "$sj"
+  local m
+  for m in "$dir"/verify/final-*.meta.json; do [ -f "$m" ] || continue
+    jq -r '"  \(.token)  \(.at)  exit \(.exit)  HEAD \(.head[0:7])  → verify/\(.label).log"' "$m"
+  done
+  echo; echo "## 걸음 (커밋 · 걸음 확인)"
+  local sid h last tok
+  for sid in $(jq -r '(.loop.steps // {}) | keys[]' "$sj" | sort -V); do
+    h="$(jq -r --arg s "$sid" '.loop.steps[$s].commit[0:7]' "$sj")"
+    last="$(ls "$dir"/verify/step-"$sid"-*.meta.json 2>/dev/null | sort | tail -1)"
+    tok="확인 수단: 검수"; [ -n "$last" ] && tok="걸음 확인 $(jq -r .token "$last")"
+    printf '  %-5s 커밋 %s · %s\n' "$sid" "$h" "$tok"
+  done
+  echo; echo "## 사람 검수 체크리스트 (handoff 미편입 = 검수에서 확인)"
+  local n item how hid st i=0
+  n="$(jq -r '(.lock.review_checklist // []) | length' "$sj")"
+  while [ "$i" -lt "$n" ]; do
+    item="$(jq -r --argjson i "$i" '.lock.review_checklist[$i] | if type=="string" then . else .item end' "$sj")"
+    how="$(jq -r --argjson i "$i" '.lock.review_checklist[$i] | if type=="string" then "" else (.how // "") end' "$sj")"
+    hid=""
+    [ -f "$dir/handoff.md" ] && hid="$(awk -v pat="checklist:$((i+1))" \
+      '/^## H-/{id=$2} /^- 관련:/ && index($0,pat){print id; exit}' "$dir/handoff.md")"
+    if [ -n "$hid" ]; then
+      st="$(awk -v id="$hid" '/^## H-/{insec=($2==id)} insec&&/^- 상태:/{sub(/^- 상태:[ \t]*/,"");print;exit}' "$dir/handoff.md")"
+      printf '  [이월→%s] %s\n            └ %s\n' "$hid" "$item" "$st"
+    else
+      printf '  [검수 확인] %s\n' "$item"
+    fi
+    [ -n "$how" ] && printf '            확인: %s\n' "$how"
+    i=$((i+1))
+  done
+  if [ -f "$dir/handoff.md" ]; then
+    echo; echo "## 이월 그릇 (handoff.md)"
+    _handoff_list "$dir"
+  fi
+}
+
+# ── handoff (이월 그릇) ───────────────────────────────────────────────────────
+# add는 활성 사이클에서만(③ 검수 시점, close 전). consume은 close 후에도 허용 —
+# 닫힌 사이클에서 변이 가능한 유일한 파일·유일한 연산(상태 전이)이다.
+cmd_handoff() {
+  local sub="${1:-}"; [ $# -gt 0 ] && shift || true
+  case "$sub" in
+    add)     _handoff_add "$@" ;;
+    list)    _handoff_list "$@" ;;
+    consume) _handoff_consume "$@" ;;
+    *) die "usage: core.sh handoff <add|list|consume> <cycle_dir> ..." ;;
+  esac
+}
+
+_handoff_add() { # <cycle_dir> -m "<제목>" --refs "<출처>" [--why "<배경>"]
+  need_jq
+  local dir="$1"; shift; require_cycle_dir "$dir"
+  require_active "$(state_json "$dir")"
+  local title="" why="" refs=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -m)     title="$2"; shift 2 ;;
+      --why)  why="$2";   shift 2 ;;
+      --refs) refs="$2";  shift 2 ;;
+      *) die "알 수 없는 옵션: $1" ;;
+    esac
+  done
+  [ -n "$title" ] || die "-m \"<제목>\" 필요"
+  # 출처 참조 필수 — checklist:N(검수 항목 유래)·brief ID·경로. report 유도가 여기에 의존한다.
+  [ -n "$refs" ] || die "--refs \"<출처>\" 필요 (예: checklist:4 · Q-1 · 경로)"
+  local hf="$dir/handoff.md"
+  [ -f "$hf" ] || printf '# Handoff — %s\n' "$(basename "$dir")" > "$hf"
+  local n
+  n="$(awk '/^## H-[0-9]+ /{sub(/^## H-/,""); sub(/ .*/,""); if($0+0>m)m=$0+0} END{print m+0}' "$hf")"
+  local hid="H-$((n+1))"
+  {
+    printf '\n## %s · %s\n' "$hid" "$title"
+    printf -- '- 상태: 대기\n'
+    [ -n "$why" ] && printf -- '- 배경: %s\n' "$why"
+    printf -- '- 관련: %s\n' "$refs"
+    printf -- '- 기록: %s\n' "$(iso_now)"
+  } >> "$hf"
+  echo "OK $hid"
+}
+
+_handoff_list() { # <cycle_dir>
+  local dir="$1"; require_cycle_dir "$dir"
+  [ -f "$dir/handoff.md" ] || { echo "NO_HANDOFF"; return 0; }
+  awk '
+    function flush(){ if(id!="") printf "%-5s %-28s %s\n", id, st, ti }
+    /^## H-/ { flush(); id=$2; ti=$0; sub(/^## H-[0-9]+[ \t]+·[ \t]+/,"",ti); st="?" }
+    /^- 상태:/ { if(st=="?"){ s=$0; sub(/^- 상태:[ \t]*/,"",s); st=s } }
+    END{ flush() }
+  ' "$dir/handoff.md"
+}
+
+_handoff_consume() { # <cycle_dir> <H-n> --by <cycle-id>
+  local dir="$1" hid="${2:-}"; shift 2 || die "usage: core.sh handoff consume <cycle_dir> <H-n> --by <cycle-id>"
+  require_cycle_dir "$dir"
+  echo "$hid" | grep -Eq '^H-[0-9]+$' || fail "BAD_HANDOFF $hid"
+  local by=""
+  while [ $# -gt 0 ]; do
+    case "$1" in --by) by="$2"; shift 2 ;; *) die "알 수 없는 옵션: $1" ;; esac
+  done
+  [ -n "$by" ] || die "--by <채택 사이클 id> 필요"
+  [ -d "$(dirname "$dir")/$by" ] || fail "NO_SUCH_CYCLE $by"
+  local hf="$dir/handoff.md"
+  [ -f "$hf" ] || fail "NO_HANDOFF"
+  grep -q "^## $hid " "$hf" || fail "NO_ENTRY $hid"
+  local st
+  st="$(awk -v id="$hid" '/^## H-/{insec=($2==id)} insec && /^- 상태:/{sub(/^- 상태:[ \t]*/,""); print; exit}' "$hf")"
+  case "$st" in 대기*) ;; *) fail "ALREADY_CONSUMED $hid ($st)" ;; esac
+  local tmp; tmp="$(mktemp)"
+  awk -v id="$hid" -v by="$by" -v ts="$(iso_now)" '
+    /^## H-/ { insec=($2==id) }
+    insec && /^- 상태: 대기/ { print "- 상태: 소진 → " by " (" ts ")"; insec=0; next }
+    { print }
+  ' "$hf" > "$tmp" && mv "$tmp" "$hf"
+  echo "OK $hid → $by"
 }
 
 # ── dispatch ─────────────────────────────────────────────────────────────────
@@ -432,6 +602,8 @@ case "$cmd" in
   step)   cmd_step "$@" ;;
   verify) cmd_verify "$@" ;;
   commit) cmd_commit "$@" ;;
+  report) cmd_report "$@" ;;
+  handoff) cmd_handoff "$@" ;;
   close)  cmd_close "$@" ;;
-  *) sed -n '2,25p' "$0" >&2; exit 2 ;;
+  *) sed -n '2,31p' "$0" >&2; exit 2 ;;
 esac

@@ -10,7 +10,7 @@ disable-model-invocation: true
 > 메인 세션은 **지휘자**다: 사용자 창구(수렴 대화·게이트·blocked 중계)이며 코드를 만들지 않는다. 단계 방법론은 `references/`, 데이터 규약은 `references/state-files.md`, 결정론 작업은 `scripts/core.sh`가 원천 — 여기 재서술하지 않는다.
 
 ## 발동
-`/task-pipeline <설명>` → 메인이 `bash .claude/skills/task-pipeline/scripts/core.sh new "<요약>"`으로 사이클을 연다(중앙 저장소에 `<cycle_dir>` 반환). 이후 모든 커맨드에 이 경로를 넘긴다. 수렴부터 시작.
+`/task-pipeline <설명>` → 메인이 `bash .claude/skills/task-pipeline/scripts/core.sh new "<요약>"`으로 사이클을 연다(중앙 저장소에 `<cycle_dir>` 반환). 이후 모든 커맨드에 이 경로를 넘긴다. `status`의 `HANDOFF`(미소진 이월)를 확인해 관련 항목을 수렴에서 제시(채택 시 `handoff consume --by`). 수렴부터 시작.
 
 ## 개요
 환원 불가능한 골격은 **기준 → [변경⇄검증] → 기록**. 나머지 단계는 과제의 불확실성이 정당화하는 만큼만 존재한다. 사람 판정 지점은 **① 착수**(방향 승인 + 통째로 동결)와 **③ 검수**(의도 부합) 둘 뿐(②는 없음). 전체 절차는 `references/stages.md`.
@@ -24,14 +24,14 @@ disable-model-invocation: true
 | 루프 (걸음별) | @generator ×1/걸음 | `core.sh verify <dir> --step S-n` · `core.sh commit <dir> S-n` |
 | 웨이브 경계 | 메인 | `core.sh verify <dir>` (최종, FAIL 시 라운드 소모, 상한 시 `LIMIT`) |
 | refactor (선택) | @refactorer | `core.sh commit <dir> --refactor -m … -- …` |
-| ③ 검수 게이트 | 메인 + 사용자 | 사람 판정 (state.json `lock.review_checklist`) |
-| 기록·종료 | 메인 | `core.sh close <dir> <done\|handoff\|cancelled\|failed>` |
+| ③ 검수 게이트 | 메인 + 사용자 | `core.sh report <dir>` 제시 → 사람 판정 · 이월분 `handoff add` |
+| 기록·종료 | 메인 | `core.sh close <dir> <done\|handoff\|cancelled\|failed>` (done은 PASS 필수) |
 
 - 게이트 발화는 `AskUserQuestion` 다지선다(header 12자 이내, 권장안 `(권장)`).
 - `blocked`(작업자 선언)·`LIMIT`(래퍼 자동) = 게이트 아닌 예외 경로 → 사람 호출.
 - 위임 판별식: 입력이 경로 · 출력이 파일·커밋·토큰 · 중간에 사용자 불필요 — 셋 다 예면 위임.
 - 서브에이전트 응답은 tool_result라 화면에 안 보인다 — 사용자에게 보일 본문(게이트 대상 포함)은 메인이 그대로 출력한 뒤 진행.
-- resume: `core.sh status`로 활성 사이클(final==null)을 찾아 state.json + journal 읽고 재개.
+- resume: `core.sh status`로 활성 사이클(final==null)을 찾아 state.json + journal 읽고 재개. `HANDOFF`(미소진 이월)도 함께 확인.
 
 ## 금지
 - **동결 수정** — ① 이후 brief·plan을 고치지 않는다. 전제 오류는 journal 기록 + blocked.
