@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # task-pipeline — 코드 변경 하네스
 
-> 메인 세션은 **지휘자**다: 사용자 창구(수렴 대화·게이트·blocked 중계)이며 코드를 만들지 않는다. 단계 방법론은 `references/`, 데이터 규약은 `references/state-files.md`, 결정론 작업은 `scripts/core.sh`가 원천 — 여기 재서술하지 않는다.
+> 메인 세션은 **지휘자**다: 사용자 창구(수렴 대화·게이트·blocked 알림)이며 코드를 만들지 않는다. 단계 방법론은 `references/`, 데이터 규약은 `references/state-files.md`, 결정론 작업은 `scripts/core.sh`가 원천 — 여기 재서술하지 않는다.
 
 ## 발동
 `/task-pipeline <설명>` → 메인이 `bash .claude/skills/task-pipeline/scripts/core.sh new "<요약>"`으로 사이클을 연다(중앙 저장소에 `<cycle_dir>` 반환). 이후 모든 커맨드에 이 경로를 넘긴다. `status`의 `HANDOFF`(미소진 이월)를 확인해 관련 항목을 수렴에서 제시(채택 시 `handoff consume --by`). 수렴부터 시작.
@@ -24,10 +24,10 @@ disable-model-invocation: true
 | 루프 (걸음별) | @generator ×1/걸음 | `core.sh verify <dir> --step S-n` · `core.sh commit <dir> S-n` |
 | 웨이브 경계 | 메인 | `core.sh verify <dir>` (최종, FAIL 시 라운드 소모, 상한 시 `LIMIT`) |
 | refactor (선택) | @refactorer | `core.sh commit <dir> --refactor -m … -- …` |
-| ③ 검수 게이트 | 메인 + 사용자 | `core.sh report <dir>` 뷰 전문을 응답 본문에 옮겨 출력 → 사람 판정 · 이월분 `handoff add` |
+| ③ 검수 게이트 | 메인 + 사용자 | 최종 점검 절차(`gate-views.md`): 요약 → 체크리스트 문답(증거 첨부) → 이월 → `core.sh report <dir>` 전문 출력 → 종합 판정 · 이월분 `handoff add` |
 | 기록·종료 | 메인 | `core.sh close <dir> <done\|handoff\|cancelled\|failed>` (done은 PASS 필수) |
 
-- 게이트 발화는 `AskUserQuestion` 다지선다(header 12자 이내, 권장안 `(권장)`).
+- 사람 접점 발화(수렴 확인·게이트·blocked·handoff)는 `references/gate-views.md` 규격 — 메인이 뷰를 즉석 생성(화면 라벨·스켈레톤 준수), `AskUserQuestion` 다지선다.
 - `blocked`(작업자 선언)·`LIMIT`(래퍼 자동) = 게이트 아닌 예외 경로 → 사람 호출.
 - 위임 판별식: 입력이 경로 · 출력이 파일·커밋·토큰 · 중간에 사용자 불필요 — 셋 다 예면 위임.
 - 서브에이전트 응답도 Bash stdout도 tool_result라 화면에 안 보인다 — 사용자에게 보일 본문(게이트 대상, 특히 `report` 뷰 전문 포함)은 메인이 응답에 그대로 옮겨 출력한 뒤 진행.
@@ -41,4 +41,4 @@ disable-model-invocation: true
 - **요약 인계** — 컨텍스트는 항상 경로로 넘긴다.
 
 ## 참조
-`references/`: `stages.md`(단계 절차·crew·병렬) · `clarify-method.md` · `plan-rules.md` · `state-files.md`(데이터 규약) · `terms.md`(용어). 템플릿: `templates/{brief,plan}.md`.
+`references/`: `stages.md`(단계 절차·crew·병렬) · `clarify-method.md` · `plan-rules.md` · `state-files.md`(데이터 규약) · `gate-views.md`(사람 접점 발화 규격) · `terms.md`(용어). 템플릿: `templates/{brief,plan}.md`.
