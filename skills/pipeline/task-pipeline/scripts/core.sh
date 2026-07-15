@@ -102,6 +102,15 @@ cmd_new() {
   base="$(git rev-parse HEAD 2>/dev/null || echo "")"
   now="$(iso_now)"
   cid="$(date -u +%Y%m%dT%H%M%SZ)"
+  # 스킬 판본 스탬프 — 스킬 파일이 사는 git 저장소의 HEAD (심링크 물리 해석, 보통 agent-tools)
+  local sroot scommit sdirty
+  sroot="$(cd "$SCRIPT_DIR/.." && pwd -P)"
+  scommit="$(git -C "$sroot" rev-parse HEAD 2>/dev/null || echo "")"
+  if [ -n "$scommit" ]; then
+    [ -n "$(git -C "$sroot" status --porcelain -- . 2>/dev/null)" ] && sdirty=true || sdirty=false
+  else
+    sdirty=null
+  fi
   local repo_store="$STORE/$slug"
   mkdir -p "$repo_store"
   # cycle-id 충돌 회피 (-2, -3 …)
@@ -109,8 +118,11 @@ cmd_new() {
   while [ -e "$dir" ]; do dir="$repo_store/${cid}-$n"; n=$((n+1)); done
   mkdir -p "$dir/verify"
   jq -n --arg cid "$(basename "$dir")" --arg slug "$slug" --arg root "$root" \
-        --arg base "$base" --arg req "$req" --arg now "$now" '{
-    cycle_id:$cid, repo:{slug:$slug, root:$root, base_commit:$base},
+        --arg base "$base" --arg req "$req" --arg now "$now" \
+        --arg scommit "$scommit" --argjson sdirty "$sdirty" '{
+    cycle_id:$cid, schema_version:1,
+    skill:{commit:(if $scommit=="" then null else $scommit end), dirty:$sdirty},
+    repo:{slug:$slug, root:$root, base_commit:$base},
     request:$req, created_at:$now,
     phase:"converge", final:null,
     lock:null,

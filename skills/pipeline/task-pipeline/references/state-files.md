@@ -24,6 +24,8 @@ ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
 ```json
 {
   "cycle_id": "20260706T143052Z",
+  "schema_version": 1,
+  "skill": { "commit": "<스킬 저장소 HEAD>", "dirty": false },
   "repo": { "slug": "github.com__acme__widget", "root": "/abs/repo", "base_commit": "<hash>" },
   "request": "<사용자 요청 원문>",
   "created_at": "<ISO8601Z>",
@@ -45,6 +47,8 @@ ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
 ```
 
 `phase` enum: `converge · criteria · plan · locked · loop · refactor · review · closed`. `final` enum: `done · handoff · cancelled · failed`. `loop.round`는 최종 검증 **누적 FAIL 수**(PASS·ERROR 미소모).
+
+**판본 스탬프** — `new`가 기록, 이후 불변. `skill.commit` = 스킬 파일이 사는 git 저장소의 HEAD(심링크는 물리 경로로 해석 — 보통 agent-tools, 해석 실패 시 null), `skill.dirty` = 스킬 서브트리 미커밋 변경 여부, `schema_version` = 이 파일의 스키마 기준점. **필드 부재 = 스탬프 이전 사이클**(legacy 코호트). 용도: 산출물을 스킬 판본별 코호트로 잘라 개선 전후를 비교.
 
 ## journal.md — append 전용
 `core.sh log`만 append(수정 금지, close 후 불가). 엔트리:
