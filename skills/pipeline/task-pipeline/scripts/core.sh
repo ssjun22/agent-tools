@@ -7,15 +7,15 @@
 #   - git 쓰기는 commit 서브커맨드 경유 (raw git 변이 금지).
 #   - verify는 전체 출력을 tee + meta 기록, 에이전트에는 실패만 보인다.
 #   - verify·commit은 ① lock 후 · close 전에만 (라이프사이클 가드).
-#   - lock이 brief·plan sha256을 동결 — 이후 드리프트는 FROZEN_DRIFT 거부.
+#   - lock이 brief·plan sha256과 clarify 최종 상태 스냅샷(mode 유도는 코드 소유)을 동결.
 #   - 라운드 = 최종 검증 FAIL 누적. PASS·ERROR는 상한을 소모하지 않는다.
 #   - close done은 최종 검증 PASS를 요구한다 (NOT_PASS 거부).
 #   - handoff.md는 close 후 유일 가변 파일 — 연산은 consume(상태 전이) 하나, 래퍼 경유.
 #   - transcript.md는 clarify 원문 정본 — append 전용, lock 후 불변.
-#   - score·guard의 의견은 격리 lane(claude -p, 도구 없음)이 내되, 통과/차단 규칙은 코드가 소유.
+#   - score·guard·brief-check의 의견은 격리 lane(claude -p, 도구 없음)이 내되, 통과/차단 규칙은 코드가 소유.
 #
 # 저장소: ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
-#   state.json · journal.md · brief.md · plan.md · transcript.md · handoff.md · verify/ · score/ · guard/
+#   state.json · journal.md · brief.md · plan.md · transcript.md · handoff.md · verify/ · score/ · guard/ · brief-check/
 #
 # usage:
 #   core.sh new "<request>"                          → OK <cycle_dir>
@@ -23,8 +23,10 @@
 #   core.sh log <cycle_dir> --actor <a> --tag <t> -m "<msg>"
 #   core.sh interview-log <cycle_dir> --q "<질문>" --a "<답변>"   → OK R<n>
 #   core.sh interview-log <cycle_dir> --refined "<결정>" --from <code|user> --round <N>
-#   core.sh score <cycle_dir>  → 스냅샷 + CONVERGED|FLOOR_PASS|BELOW_FLOOR|EARLY|SNAPSHOT_UNAVAILABLE
+#   core.sh score <cycle_dir> [--greenfield]         → 스냅샷 + CONVERGED|FLOOR_PASS|BELOW_FLOOR|EARLY|SNAPSHOT_UNAVAILABLE
 #   core.sh guard <cycle_dir>  → 판정 뷰 + PASS|BLOCK|UNAVAILABLE
+#   core.sh brief-check <cycle_dir>                  → 대조 뷰 + PASS|FAIL|UNAVAILABLE
+#   core.sh clarify-status <cycle_dir>               → clarify 최종 상태 요약 + CLEAN|WARN <n>
 #   core.sh step phase   <cycle_dir> <phase>
 #   core.sh step lock    <cycle_dir> --verify "<cmd>" --max <N> [--branch <name>] [--check "<항목> :: <확인 방법>"]...
 #   core.sh verify       <cycle_dir> [--step <S-n>]  → PASS|FAIL|ERROR|LIMIT
@@ -228,12 +230,18 @@ cmd_interview_log() {
   fi
 }
 
-# 채점 — rubric 4축 스냅샷 + floor·streak 판정. 마지막 줄 토큰:
+# 채점 — rubric 축 스냅샷 + floor·streak 판정. 기본 4축, --greenfield(기존 동작 무접점 신규 작업)는
+# 보존(preserve)을 축 집합에서 제외한다 — 억지 만점이 아니라 채점 대상 자체를 바꾼다.
+# 축 구성이 직전 채점과 다르면 streak 리셋(비교 불능). 마지막 줄 토큰:
 #   CONVERGED(floor+2연속 → guard로) | FLOOR_PASS(streak 1) | BELOW_FLOOR | EARLY | SNAPSHOT_UNAVAILABLE
 cmd_score() {
-  [ $# -eq 1 ] || die "usage: core.sh score <cycle_dir>"
+  [ $# -ge 1 ] || die "usage: core.sh score <cycle_dir> [--greenfield]"
   need_jq
-  local dir="$1"; require_cycle_dir "$dir"
+  local dir="$1"; shift; require_cycle_dir "$dir"
+  local gf=false
+  while [ $# -gt 0 ]; do
+    case "$1" in --greenfield) gf=true; shift ;; *) die "알 수 없는 옵션: $1" ;; esac
+  done
   local sj; sj="$(state_json "$dir")"
   require_unlocked "$sj"
   local tf; tf="$(_transcript "$dir")"
@@ -241,36 +249,45 @@ cmd_score() {
   local rounds; rounds="$(_round_max "$tf")"
   [ "$rounds" -gt "$SCORE_MIN_ROUNDS" ] || { echo "EARLY"; return 0; }
   command -v claude >/dev/null 2>&1 || { echo "SNAPSHOT_UNAVAILABLE"; return 0; }
+  local axes
+  if [ "$gf" = true ]; then axes='["problem","goal","nongoal"]'
+  else axes='["problem","goal","preserve","nongoal"]'; fi
   mkdir -p "$dir/score"
   local label="R${rounds}-$(date -u +%Y%m%dT%H%M%SZ)"
   local raw="$dir/score/$label.log" res="$dir/score/$label.json"
-  if ! { cat "$SCRIPT_DIR/prompts/rubric.md"; echo; echo "---"; echo; cat "$tf"; } \
+  if ! { cat "$SCRIPT_DIR/prompts/rubric.md"; echo; echo "---"; echo
+         [ "$gf" = true ] && { echo "MODE: greenfield"; echo; }
+         cat "$tf"; } \
        | _lane_run "$raw" "$res"; then
     echo "── 채점기 장애 (raw: $raw) ──" >&2
     echo "SNAPSHOT_UNAVAILABLE"; return 0
   fi
-  if ! jq -e '[.problem.score,.goal.score,.preserve.score,.nongoal.score]
+  if ! jq -e --argjson ax "$axes" '[.[$ax[]].score]
               | all(type=="number" and .>=1 and .<=5)' "$res" >/dev/null 2>&1; then
     echo "── 채점 형식 불일치 (raw: $raw) ──" >&2
     echo "SNAPSHOT_UNAVAILABLE"; return 0
   fi
   # floor·streak 판정 (판정은 코드). streak = 연속 '라운드' — 같은 라운드 재채점은 가산 없음.
-  local pass streak last_round
-  pass="$(jq -r --argjson f "$SCORE_FLOOR" \
-    '[.problem.score,.goal.score,.preserve.score,.nongoal.score] | min >= $f' "$res")"
+  local pass streak last_round last_gf
+  pass="$(jq -r --argjson ax "$axes" --argjson f "$SCORE_FLOOR" \
+    '[.[$ax[]].score] | min >= $f' "$res")"
   streak="$(jq -r '.clarify.streak // 0' "$sj")"
   last_round="$(jq -r '.clarify.last_score.round // 0' "$sj")"
+  last_gf="$(jq -r 'if .clarify.last_score then ((.clarify.last_score.greenfield // false) | tostring) else "none" end' "$sj")"
+  [ "$last_gf" = "none" ] || [ "$last_gf" = "$gf" ] || streak=0   # 축 구성 변경 → 리셋
   if [ "$pass" != "true" ]; then streak=0
   elif [ "$rounds" -gt "$last_round" ]; then streak=$((streak+1))
   elif [ "$streak" -eq 0 ]; then streak=1
   fi
   jq_inplace "$sj" --argjson r "$rounds" --argjson st "$streak" --argjson fl "$pass" \
-    --arg t "$(iso_now)" \
-    --argjson sc "$(jq -c '{problem:.problem.score,goal:.goal.score,preserve:.preserve.score,nongoal:.nongoal.score}' "$res")" '
-    .clarify = ((.clarify // {}) + {streak:$st, last_score:{at:$t, round:$r, floor:$fl, scores:$sc}})'
+    --arg t "$(iso_now)" --argjson g "$gf" \
+    --argjson sc "$(jq -c --argjson ax "$axes" '[$ax[] as $k | {($k): .[$k].score}] | add' "$res")" '
+    .clarify = ((.clarify // {}) + {streak:$st, last_score:{at:$t, round:$r, floor:$fl, greenfield:$g, scores:$sc}})'
   # 스냅샷 뷰 — 약한 축 = 최저점 (동률이면 problem→goal→preserve→nongoal 순)
   echo "## 채점 스냅샷 — R$rounds"
-  jq -r '[["problem",.problem],["goal",.goal],["preserve",.preserve],["nongoal",.nongoal]] as $axes
+  [ "$gf" = true ] && echo "축 구성: greenfield — 보존(preserve) 채점 제외"
+  jq -r --argjson ax "$axes" '
+    [$ax[] as $k | [$k, .[$k]]] as $axes
     | ($axes | min_by(.[1].score)) as $weak
     | ($axes | map("\(.[0])\t\(.[1].score)\t\(.[1].justification // "")") | join("\n"))
       + "\n약한 축: \($weak[0]) (\($weak[1].score)) — \($weak[1].justification // "")"' "$res"
@@ -337,6 +354,121 @@ cmd_guard() {
                                + (if .question then " → \(.question)" else "" end)) | join("\n"))
        else "\n  gap 없음" end)' "$oj"
   echo "$token"
+}
+
+# brief 대조 — 기계 태그 검사(코드) + 전사 대조 lane(의견) + 코드 규칙.
+# brief 생성 직후·① lock 전에 돈다. FAIL이면 동결 전이므로 brief 수정 후 재실행.
+# 규칙: 태그 위반 ≥1 → FAIL(기계, lane 미실행) · lane verdict=="fail" OR high ≥1 → FAIL · 그 외 PASS.
+# lane 장애 → UNAVAILABLE(고지 후 진행 — guard와 동일 정책). 마지막 줄 토큰: PASS|FAIL|UNAVAILABLE
+cmd_brief_check() {
+  [ $# -eq 1 ] || die "usage: core.sh brief-check <cycle_dir>"
+  need_jq
+  local dir="$1"; require_cycle_dir "$dir"
+  local sj; sj="$(state_json "$dir")"
+  require_unlocked "$sj"
+  local tf bf; tf="$(_transcript "$dir")"; bf="$dir/brief.md"
+  [ -s "$tf" ] || fail "NO_TRANSCRIPT"
+  [ -s "$bf" ] || fail "NO_BRIEF"
+  local max; max="$(_round_max "$tf")"
+  # ① 기계 태그 검사 — 확정 항목(`- G/C/N/A-n`)은 [from-code|user][R<n>] 필수, R<n>은 실존 라운드
+  local viol
+  viol="$(awk -v max="$max" '
+    /^- [GCNA]-[0-9]+/ {
+      id=$2
+      if ($0 !~ /\[from-(code|user)\]\[R[0-9]+\]/) { print "  " id " — 출처 태그 없음"; next }
+      match($0, /\[R[0-9]+\]/)
+      r=substr($0, RSTART+2, RLENGTH-3)+0
+      if (r<1 || r>max) print "  " id " — R" r " 범위 밖 (최대 R" max ")"
+    }' "$bf")"
+  local bsha; bsha="$(_sha256 "$bf")"   # 판정 귀속 — lock이 판본 일치를 대조한다
+  if [ -n "$viol" ]; then
+    jq_inplace "$sj" --arg t "$(iso_now)" --arg bs "$bsha" '
+      .clarify = ((.clarify // {}) + {last_brief_check:{at:$t, token:"FAIL", high:0, mechanical:true, brief_sha:$bs}})'
+    echo "## brief-check — 태그 위반 (기계 검사, lane 미실행)"
+    echo "$viol"
+    echo "FAIL"; return 0
+  fi
+  command -v claude >/dev/null 2>&1 || { echo "UNAVAILABLE"; return 0; }
+  mkdir -p "$dir/brief-check"
+  local ts; ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  local raw="$dir/brief-check/$ts.log" res="$dir/brief-check/$ts.json"
+  if ! { cat "$SCRIPT_DIR/prompts/brief-check.md"; echo; echo "## BRIEF"; cat "$bf"; \
+         echo; echo "## TRANSCRIPT"; cat "$tf"; } \
+       | _lane_run "$raw" "$res" \
+     || ! jq -e '(.verdict=="pass" or .verdict=="fail") and (.issues|type=="array")' "$res" >/dev/null 2>&1; then
+    echo "── brief-check lane 장애 (raw: $raw) ──" >&2
+    echo "UNAVAILABLE"; return 0
+  fi
+  # ② 코드 규칙 — 판정은 코드가 소유
+  local verdict high token
+  verdict="$(jq -r '.verdict' "$res")"
+  high="$(jq '[.issues[]? | select(.severity=="high")] | length' "$res")"
+  if [ "$verdict" != "pass" ] || [ "$high" -ge 1 ]; then token="FAIL"; else token="PASS"; fi
+  jq_inplace "$sj" --arg t "$(iso_now)" --arg tok "$token" --argjson h "$high" --arg bs "$bsha" '
+    .clarify = ((.clarify // {}) + {last_brief_check:{at:$t, token:$tok, high:$h, mechanical:false, brief_sha:$bs}})'
+  # 대조 뷰 — FAIL이면 brief 수정(동결 전) 재료
+  jq -r '"## brief-check — \(.verdict) · high \([.issues[]?|select(.severity=="high")]|length)"
+    + (if (.issues|length) > 0
+       then "\n" + (.issues | map("  [\(.severity)] \(.type // "?") \(.item // "-") — \(.finding)"
+                                 + (if .evidence then " (근거: \(.evidence))" else "" end)) | join("\n"))
+       else "\n  이슈 없음" end)' "$res"
+  echo "$token"
+}
+
+# ── clarify 최종 상태 — 스냅샷·경고 (clarify-status 뷰 · step lock 동결 공용) ──
+# mode 유도(코드 소유): 채점 기록 없음 = adhoc · floor+streak≥2+guard PASS 완주 = scored ·
+# 채점 흔적은 있으나 체인 미완 = override(사용자 재량 종료).
+_clarify_snapshot_json() { # <cycle_dir> → JSON 한 줄
+  local dir="$1" bsha=""
+  [ -s "$dir/brief.md" ] && bsha="$(_sha256 "$dir/brief.md")"
+  jq -c --arg bsha "$bsha" '
+    .clarify // {} | {
+      mode: (if (.last_score // null) == null then "adhoc"
+             elif (.last_score.floor == true and (.streak // 0) >= 2
+                   and (.last_guard.token // "") == "PASS") then "scored"
+             else "override" end),
+      streak: (.streak // 0),
+      score_round: (.last_score.round // null),
+      greenfield: (if (.last_score // null) == null then null else (.last_score.greenfield == true) end),
+      guard: (.last_guard.token // null),
+      brief_check: (.last_brief_check.token // null),
+      brief_sha_match: (if (.last_brief_check // null) == null or $bsha == "" then null
+                        else ((.last_brief_check.brief_sha // "") == $bsha) end)
+    }' "$(state_json "$dir")"
+}
+
+_clarify_warnings() { # <snapshot-json 인자> → 경고 줄들 (없으면 무출력)
+  local js="$1"
+  [ "$(jq -r .mode <<<"$js")" = "override" ] \
+    && echo "경고: 채점 체인 미완(floor·streak·guard) — 사용자 재량 종료"
+  case "$(jq -r '.brief_check // "none"' <<<"$js")" in
+    none) echo "경고: brief-check 미실행" ;;
+    FAIL) echo "경고: brief-check FAIL 미해소" ;;
+  esac
+  [ "$(jq -r '.brief_sha_match == false' <<<"$js")" = "true" ] \
+    && echo "경고: brief-check 이후 brief 수정됨(판본 불일치) — 재실행 필요"
+  return 0
+}
+
+# clarify 최종 상태 뷰 — ① 착수 뷰의 고지 재료 (판정·저장 없음). 마지막 줄 CLEAN | WARN <n>
+cmd_clarify_status() {
+  [ $# -eq 1 ] || die "usage: core.sh clarify-status <cycle_dir>"
+  need_jq
+  local dir="$1"; require_cycle_dir "$dir"
+  local js; js="$(_clarify_snapshot_json "$dir")"
+  echo "## clarify 최종 상태"
+  jq -r '"mode \(.mode) · streak \(.streak) · guard \(.guard // "미실행")"
+    + " · brief-check \(.brief_check // "미실행")"
+    + (if .brief_sha_match == true then "(판본 일치)"
+       elif .brief_sha_match == false then "(판본 불일치)" else "" end)
+    + (if .greenfield == true then " · greenfield" else "" end)' <<<"$js"
+  local warns; warns="$(_clarify_warnings "$js")"
+  if [ -n "$warns" ]; then
+    echo "$warns"
+    echo "WARN $(printf '%s\n' "$warns" | grep -c .)"
+  else
+    echo "CLEAN"
+  fi
 }
 
 # ── step ──────────────────────────────────────────────────────────────────────
@@ -420,16 +552,18 @@ _step_lock() {
     esac
     checks_json="$(jq -n --argjson a "$checks_json" --arg i "$item" --arg h "$how" '$a + [{item:$i, how:$h}]')"
   done
-  local bsha psha
+  local bsha psha csnap
   bsha="$(_sha256 "$dir/brief.md")"; psha="$(_sha256 "$plan")"
+  csnap="$(_clarify_snapshot_json "$dir")"   # clarify 최종 상태를 lock에 사진으로 동결
   jq_inplace "$sj" --arg v "$verify" --argjson m "$max" --arg b "$branch" \
      --arg base "$base" --arg t "$(iso_now)" --argjson ck "$checks_json" \
-     --arg bs "$bsha" --arg ps "$psha" '
+     --arg bs "$bsha" --arg ps "$psha" --argjson cs "$csnap" '
     .lock = {at:$t, verify_cmd:$v, max_rounds:$m, review_checklist:$ck, branch:$b,
-             base_commit:$base, brief_sha:$bs, plan_sha:$ps}
+             base_commit:$base, brief_sha:$bs, plan_sha:$ps, clarify:$cs}
     | .loop.max_rounds = $m
     | .phase = "locked"
     | .gates += [{gate:"①", at:$t, verdict:"lock"}]'
+  _clarify_warnings "$csnap"   # 기록+고지 — 차단하지 않는다 (뷰 고지는 clarify-status가 선행)
   echo "OK $branch $base"
 }
 
@@ -794,11 +928,13 @@ case "$cmd" in
   interview-log) cmd_interview_log "$@" ;;
   score)  cmd_score "$@" ;;
   guard)  cmd_guard "$@" ;;
+  brief-check) cmd_brief_check "$@" ;;
+  clarify-status) cmd_clarify_status "$@" ;;
   step)   cmd_step "$@" ;;
   verify) cmd_verify "$@" ;;
   commit) cmd_commit "$@" ;;
   report) cmd_report "$@" ;;
   handoff) cmd_handoff "$@" ;;
   close)  cmd_close "$@" ;;
-  *) sed -n '2,37p' "$0" >&2; exit 2 ;;
+  *) sed -n '2,39p' "$0" >&2; exit 2 ;;
 esac

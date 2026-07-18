@@ -13,8 +13,9 @@ ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
 ├── verify/        # 검증 raw + meta (불변)
 │   ├── final-<ts>.log final-<ts>.meta.json   # 최종 검증
 │   └── step-S-1-<ts>.log …                   # 걸음 확인
-├── score/         # 채점 raw 캡처 — R<n>-<ts>.log(원문) · R<n>-<ts>.json(4축 파싱본)
-└── guard/         # guard lane raw 캡처 — <ts>-{contrarian,gap_hunter,closer}.log/.json
+├── score/         # 채점 raw 캡처 — R<n>-<ts>.log(원문) · R<n>-<ts>.json(축별 파싱본)
+├── guard/         # guard lane raw 캡처 — <ts>-{contrarian,gap_hunter,closer}.log/.json
+└── brief-check/   # brief 대조 lane raw 캡처 — <ts>.log/.json
 ```
 
 - **repo-slug**: git remote 기반 `<host>__<owner>__<repo>`(예 `github.com__acme__widget`), remote 없으면 `<basename>__<경로해시6>`.
@@ -34,17 +35,25 @@ ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
   "created_at": "<ISO8601Z>",
   "phase": "converge|criteria|plan|locked|loop|refactor|review|closed",
   "final": null,                    // done|handoff|cancelled|failed (close 시)
-  "clarify": {                      // 채점 루프·guard 판정만 (진단은 score/·guard/ 지층. 부재 = 채점 전)
-    "streak": 0,                    // floor 연속 통과 '라운드' 수 — guard BLOCK 시 0으로 리셋
-    "last_score": { "at": "...", "round": 4, "floor": true,
+  "clarify": {                      // 채점 루프·guard·brief-check 판정만 (진단은 score/·guard/·brief-check/ 지층. 부재 = 채점 전)
+    "streak": 0,                    // floor 연속 통과 '라운드' 수 — guard BLOCK·축 구성 변경 시 0으로 리셋
+    "last_score": { "at": "...", "round": 4, "floor": true, "greenfield": false,
                     "scores": { "problem": 5, "goal": 5, "preserve": 5, "nongoal": 5 } },
-    "last_guard": { "at": "...", "token": "PASS|BLOCK", "high": 0 }
+    "last_guard": { "at": "...", "token": "PASS|BLOCK", "high": 0 },
+    "last_brief_check": { "at": "...", "token": "PASS|FAIL", "high": 0, "mechanical": false,
+                          "brief_sha": "<판정 시점 brief sha256 — lock이 판본 일치를 대조>" }
   },
   "lock": {                         // ① 동결 시 채워짐 (그 전엔 null)
     "at": "...", "verify_cmd": "<최종 검증 명령>", "max_rounds": 3,
     "review_checklist": [{"item": "<판정 문장>", "how": "<확인 방법: 어디를 열어 무엇을 본다>"}],
     "branch": "feat/<slug>", "base_commit": "<hash>",
-    "brief_sha": "<sha256>", "plan_sha": "<sha256>"
+    "brief_sha": "<sha256>", "plan_sha": "<sha256>",
+    "clarify": {                    // lock 시점 clarify 최종 상태 스냅샷 — 기록+고지, 차단 아님
+      "mode": "scored|override|adhoc",  // 유도는 코드 소유: scored=floor+streak≥2+guard PASS 완주 ·
+                                        // override=채점 흔적 있으나 체인 미완(사용자 재량 종료) · adhoc=무채점
+      "streak": 2, "score_round": 5, "greenfield": false,
+      "guard": "PASS", "brief_check": "PASS", "brief_sha_match": true
+    }
   },
   "loop": {
     "round": 0, "max_rounds": 3,
@@ -73,10 +82,14 @@ ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
 ## transcript.md — clarify 원문 정본
 `core.sh interview-log`만 append(요약·삭제 금지, lock 후 `LOCKED` 거부). 라운드는 `## R<n> · <ts>` 아래 **Q:**/**A:** 원문, 확인된 결정은 `- [refined][from-code|from-user][R<n>] <결정>` 한 줄 — clarify 결정 기록의 단일 정본(journal `문답` 이중기록 폐지, `문답`은 ③ 검수 전용). 채점기의 무상태 재파생(매 라운드 전문 재채점)이 이 파일에 의존한다.
 
-## score/ · guard/ — 격리 lane 캡처
-`core.sh score`·`guard`가 격리 lane(`claude -p`, 도구 없음, 기본 haiku — `TP_CLARIFY_MODEL` 오버라이드)의 raw를 캡처한다(verify/ 패턴). state.json에는 판정만, 진단(justification·발견 내용)은 이 지층에.
-- **score/**: `R<n>-<ts>.log`(raw) · `.json`(4축 파싱본). 토큰 `CONVERGED`(floor+2연속) `FLOOR_PASS` `BELOW_FLOOR` `EARLY`(R3까지 무채점) `SNAPSHOT_UNAVAILABLE`(장애 — 인터뷰는 계속). floor(전 축 4점)·streak 판정은 코드 소유.
+## score/ · guard/ · brief-check/ — 격리 lane 캡처
+`core.sh score`·`guard`·`brief-check`가 격리 lane(`claude -p`, 도구 없음, 기본 haiku — `TP_CLARIFY_MODEL` 오버라이드)의 raw를 캡처한다(verify/ 패턴). state.json에는 판정만, 진단(justification·발견 내용)은 이 지층에.
+- **score/**: `R<n>-<ts>.log`(raw) · `.json`(축별 파싱본). 토큰 `CONVERGED`(floor+2연속) `FLOOR_PASS` `BELOW_FLOOR` `EARLY`(R3까지 무채점) `SNAPSHOT_UNAVAILABLE`(장애 — 인터뷰는 계속). floor(전 축 4점)·streak 판정은 코드 소유. `--greenfield`(기존 동작 무접점 신규 작업)는 보존(preserve) 축을 축 집합에서 제외 — 축 구성이 직전 채점과 다르면 streak 리셋.
 - **guard/**: `<ts>-{contrarian,gap_hunter,closer}.log/.json`. 발견자 2 독립 병렬 → closer 종합([발견+transcript]) → 코드 규칙 `closer not_ready OR 종합 gaps의 high≥1 → BLOCK`(+streak 리셋), 그 외 `PASS`, lane 장애 `UNAVAILABLE`. 프롬프트 원천: `scripts/prompts/`.
+- **brief-check/**: `<ts>.log/.json`. brief 생성 직후 전사 대조 — 기계 태그 검사(코드: 확정 항목 `- G/C/N/A-n` 줄의 출처 태그 유무·R 범위) 위반이면 lane 없이 `FAIL`, 통과 시 대조 lane(누락·왜곡·무단추가·재등장, severity) 후 코드 규칙 `verdict fail OR high≥1 → FAIL`, 그 외 `PASS`, lane 장애 `UNAVAILABLE`(① 뷰에 고지 후 진행). FAIL이면 동결 전이므로 brief 수정 후 재실행. 판정 시점 brief sha를 함께 기록 — 판정 후 brief가 또 바뀌면 lock 스냅샷의 `brief_sha_match`가 false로 드러난다.
+
+## clarify-status — 최종 상태 뷰 (저장 없음)
+`core.sh clarify-status`가 `_clarify_snapshot_json`(lock 동결과 같은 코드 경로)으로 mode·streak·guard·brief-check·판본 일치를 요약하고 경고 줄(체인 미완·brief-check 미실행/FAIL/판본 불일치)을 산출한다. 마지막 줄 `CLEAN | WARN <n>`. ① 착수 뷰가 이 출력을 고지 재료로 쓴다 — lock은 같은 스냅샷을 `lock.clarify`에 동결한다(기록+고지, 차단 아님).
 
 ## verify/ — 검증 캡처
 `core.sh verify`가 전체 출력을 tee(`<label>.log`) + meta(`<label>.meta.json`: `at·cmd·exit·head·token·label`) 기록. 토큰 `PASS/FAIL/ERROR/LIMIT`. 에이전트에는 실패만 상세 노출.
@@ -93,8 +106,8 @@ ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
 state.json(판정·커밋)·verify meta·동결 checklist·handoff 상태를 매번 조합하는 뷰. ③ 검수 재료(close 전)와 사후 감사(close 후)를 같은 명령이 겸해 "검수 때 본 것 ≠ 기록" 괴리가 없다. 유도 규칙: **checklist 항목 중 handoff(`checklist:N` 참조)로 빠지지 않은 것 = 검수에서 확인** — 이 유도는 handoff의 출처 참조 필수, ③ 문답의 journal 기록, close done의 PASS 가드가 받친다.
 
 ## brief.md / plan.md
-- **brief.md**: `templates/brief.md` 6섹션(요청 원문/성공/보존/비목표/전제/미해결). 인터뷰 중 영속 정본은 transcript뿐 — brief는 인터뷰 종료(restate 승인) 시 1회 생성하며 확정 항목에 출처 태그 `[from-code|from-user][R<n>]`를 붙인다. ①에서 전체 동결. 루프 중 전제 오류 발견 시 brief 수정이 아니라 journal + blocked.
+- **brief.md**: `templates/brief.md` 6섹션(요청 원문/성공/보존/비목표/전제/미해결). 인터뷰 중 영속 정본은 transcript뿐 — brief는 인터뷰 종료(restate 승인) 시 1회 생성하며 확정 항목에 출처 태그 `[from-code|from-user][R<n>]`를 붙인다(항목 줄 형식 `- G-1 [from-user][R3] <내용>` — `brief-check` 기계 검사 대상). 생성 직후 `core.sh brief-check`로 transcript 대조 후 ①에서 전체 동결. 루프 중 전제 오류 발견 시 brief 수정이 아니라 journal + blocked.
 - **plan.md**: `templates/plan.md`. frontmatter(cycle·repo·base_commit·type·slug) + 산문 + **` ```json steps ` 블록(기계 정본)**. 래퍼·generator 배정은 블록만 읽는다(`core.sh commit`이 `files`·title·type을, `verify --step`이 `check`를 여기서 읽음). 걸음당 `check`/`human_check` ≥1은 ① lock에서 래퍼가 검증(`STEP_NO_CHECK`).
 
 ## 전이 규칙
-전이는 전부 `core.sh` 경유(수기 JSON 편집·raw git 금지). **verify·commit은 ① lock 후 · close 전에만**(가드 토큰: `NOT_LOCKED`/`CLOSED`), **interview-log·score·guard는 lock 전에만**(`LOCKED`), 동결 후 brief·plan 드리프트는 `FROZEN_DRIFT`로 거부. 커밋은 `core.sh commit`(걸음: subject `<type>: <title>` + trailer `TP-Step`/`TP-Cycle`, 또는 `--refactor`; 무변경 시 `NO_CHANGES` — HEAD가 같은 걸음의 커밋일 때만 멱등 인정). 종료는 `core.sh close <dir> <final>`(done은 `loop.last_verify.token==PASS` 필수 — 아니면 `NOT_PASS` 거부. 이동 없음 — 무기한 보존, `status`가 `final!=null`로 필터). resume은 `core.sh status`로 활성 사이클을 찾아 state.json + journal 재개.
+전이는 전부 `core.sh` 경유(수기 JSON 편집·raw git 금지). **verify·commit은 ① lock 후 · close 전에만**(가드 토큰: `NOT_LOCKED`/`CLOSED`), **interview-log·score·guard·brief-check는 lock 전에만**(`LOCKED`), 동결 후 brief·plan 드리프트는 `FROZEN_DRIFT`로 거부. 커밋은 `core.sh commit`(걸음: subject `<type>: <title>` + trailer `TP-Step`/`TP-Cycle`, 또는 `--refactor`; 무변경 시 `NO_CHANGES` — HEAD가 같은 걸음의 커밋일 때만 멱등 인정). 종료는 `core.sh close <dir> <final>`(done은 `loop.last_verify.token==PASS` 필수 — 아니면 `NOT_PASS` 거부. 이동 없음 — 무기한 보존, `status`가 `final!=null`로 필터). resume은 `core.sh status`로 활성 사이클을 찾아 state.json + journal 재개.
