@@ -11,14 +11,20 @@
 #   - 라운드 = 최종 검증 FAIL 누적. PASS·ERROR는 상한을 소모하지 않는다.
 #   - close done은 최종 검증 PASS를 요구한다 (NOT_PASS 거부).
 #   - handoff.md는 close 후 유일 가변 파일 — 연산은 consume(상태 전이) 하나, 래퍼 경유.
+#   - transcript.md는 clarify 원문 정본 — append 전용, lock 후 불변.
+#   - score·guard의 의견은 격리 lane(claude -p, 도구 없음)이 내되, 통과/차단 규칙은 코드가 소유.
 #
 # 저장소: ${TASK_PIPELINE_STORE:-~/.task-pipeline}/<repo-slug>/<cycle-id>/
-#   state.json · journal.md · brief.md · plan.md · handoff.md · verify/
+#   state.json · journal.md · brief.md · plan.md · transcript.md · handoff.md · verify/ · score/ · guard/
 #
 # usage:
 #   core.sh new "<request>"                          → OK <cycle_dir>
 #   core.sh status [<cycle_dir>]                     → 활성 사이클 요약 + 미소진 handoff
 #   core.sh log <cycle_dir> --actor <a> --tag <t> -m "<msg>"
+#   core.sh interview-log <cycle_dir> --q "<질문>" --a "<답변>"   → OK R<n>
+#   core.sh interview-log <cycle_dir> --refined "<결정>" --from <code|user> --round <N>
+#   core.sh score <cycle_dir>  → 스냅샷 + CONVERGED|FLOOR_PASS|BELOW_FLOOR|EARLY|SNAPSHOT_UNAVAILABLE
+#   core.sh guard <cycle_dir>  → 판정 뷰 + PASS|BLOCK|UNAVAILABLE
 #   core.sh step phase   <cycle_dir> <phase>
 #   core.sh step lock    <cycle_dir> --verify "<cmd>" --max <N> [--branch <name>] [--check "<항목> :: <확인 방법>"]...
 #   core.sh verify       <cycle_dir> [--step <S-n>]  → PASS|FAIL|ERROR|LIMIT
@@ -35,6 +41,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib.sh"
 
 STORE="${TASK_PIPELINE_STORE:-$HOME/.task-pipeline}"
+
+# ── clarify 상수 ─────────────────────────────────────────────────────────────
+CLARIFY_MODEL="${TP_CLARIFY_MODEL:-haiku}"  # 채점기·guard lane 모델
+SCORE_FLOOR=4        # 전 축 최저선 (1~5 척도)
+SCORE_MIN_ROUNDS=3   # 이 라운드까지는 채점하지 않음 (조기 채점 방지)
 
 # ── 새 모델 enum ──────────────────────────────────────────────────────────────
 PHASE_ENUM="converge criteria plan locked loop refactor review closed"
@@ -53,6 +64,10 @@ require_active() { # <state.json> — close 전에만
 require_locked() { # <state.json> — ① lock 후 · close 전에만
   require_active "$1"
   [ "$(jq -r '.lock // "null"' "$1")" != "null" ] || fail "NOT_LOCKED"
+}
+require_unlocked() { # <state.json> — clarify 구간: close 전 · ① lock 전에만
+  require_active "$1"
+  [ "$(jq -r '.lock // "null"' "$1")" = "null" ] || fail "LOCKED"
 }
 
 # ── 동결 무결 ────────────────────────────────────────────────────────
@@ -157,6 +172,171 @@ cmd_log() {
   [ -f "$j" ] || fail "NO_JOURNAL"
   printf '\n### %s · %s · %s\n%s\n' "$(iso_now)" "$actor" "$tag" "$msg" >> "$j"
   echo "OK"
+}
+
+# ── clarify: interview-log · score · guard ───────────────────────────────────
+# transcript.md = 인터뷰 원문 정본 (append 전용). 채점·guard는 격리 lane(claude -p,
+# 도구 없음)이 의견을 내고, 통과/차단 규칙은 아래 코드가 소유한다. raw는 score/·guard/에
+# 캡처(verify/ 패턴), state.json에는 판정만 남긴다.
+
+_transcript() { echo "$1/transcript.md"; }
+
+_round_max() { # <transcript> — 최대 라운드 번호 (없으면 0)
+  awk '/^## R[0-9]+ /{ n=substr($2,2)+0; if(n>m)m=n } END{ print m+0 }' "$1"
+}
+
+# 격리 lane 1회 호출 — 프롬프트(stdin) → claude -p(도구 없음) → .result의 JSON 추출.
+# 성공: <out_json>에 파싱된 JSON 저장 후 0. 실패: 비0 (raw는 <raw_log>에 캡처됨).
+_lane_run() { # <raw_log> <out_json>  (프롬프트는 stdin)
+  local raw="$1" out="$2" rc=0
+  claude -p --model "$CLARIFY_MODEL" --tools "" --output-format json >"$raw" 2>&1 || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  jq -r '.result // empty' "$raw" 2>/dev/null | grep -v '^```' | jq -ce . > "$out" 2>/dev/null || return 1
+}
+
+cmd_interview_log() {
+  [ $# -ge 1 ] || die "usage: core.sh interview-log <cycle_dir> --q \"<질문>\" --a \"<답변>\" | --refined \"<결정>\" --from <code|user> --round <N>"
+  need_jq
+  local dir="$1"; shift; require_cycle_dir "$dir"
+  require_unlocked "$(state_json "$dir")"
+  local q="" a="" refined="" from="" round=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --q)       q="$2";       shift 2 ;;
+      --a)       a="$2";       shift 2 ;;
+      --refined) refined="$2"; shift 2 ;;
+      --from)    from="$2";    shift 2 ;;
+      --round)   round="$2";   shift 2 ;;
+      *) die "알 수 없는 옵션: $1" ;;
+    esac
+  done
+  local tf; tf="$(_transcript "$dir")"
+  [ -f "$tf" ] || printf '# Transcript — %s\n' "$(basename "$dir")" > "$tf"
+  if [ -n "$refined" ]; then
+    [ -z "$q$a" ] || die "--refined는 --q/--a와 함께 쓸 수 없음"
+    in_enum "$from" "code user" || die "--from은 code|user"
+    case "$round" in ''|*[!0-9]*) die "--round <N> 필요" ;; esac
+    local max; max="$(_round_max "$tf")"
+    [ "$round" -ge 1 ] && [ "$round" -le "$max" ] || fail "BAD_ROUND R$round (최대 R$max)"
+    printf -- '- [refined][from-%s][R%s] %s\n' "$from" "$round" "$refined" >> "$tf"
+    echo "OK refined R$round"
+  else
+    [ -n "$q" ] && [ -n "$a" ] || die "--q/--a 모두 필요 (또는 --refined)"
+    local n; n=$(( $(_round_max "$tf") + 1 ))
+    printf '\n## R%s · %s\n**Q:** %s\n**A:** %s\n' "$n" "$(iso_now)" "$q" "$a" >> "$tf"
+    echo "OK R$n"
+  fi
+}
+
+# 채점 — rubric 4축 스냅샷 + floor·streak 판정. 마지막 줄 토큰:
+#   CONVERGED(floor+2연속 → guard로) | FLOOR_PASS(streak 1) | BELOW_FLOOR | EARLY | SNAPSHOT_UNAVAILABLE
+cmd_score() {
+  [ $# -eq 1 ] || die "usage: core.sh score <cycle_dir>"
+  need_jq
+  local dir="$1"; require_cycle_dir "$dir"
+  local sj; sj="$(state_json "$dir")"
+  require_unlocked "$sj"
+  local tf; tf="$(_transcript "$dir")"
+  [ -s "$tf" ] || fail "NO_TRANSCRIPT"
+  local rounds; rounds="$(_round_max "$tf")"
+  [ "$rounds" -gt "$SCORE_MIN_ROUNDS" ] || { echo "EARLY"; return 0; }
+  command -v claude >/dev/null 2>&1 || { echo "SNAPSHOT_UNAVAILABLE"; return 0; }
+  mkdir -p "$dir/score"
+  local label="R${rounds}-$(date -u +%Y%m%dT%H%M%SZ)"
+  local raw="$dir/score/$label.log" res="$dir/score/$label.json"
+  if ! { cat "$SCRIPT_DIR/prompts/rubric.md"; echo; echo "---"; echo; cat "$tf"; } \
+       | _lane_run "$raw" "$res"; then
+    echo "── 채점기 장애 (raw: $raw) ──" >&2
+    echo "SNAPSHOT_UNAVAILABLE"; return 0
+  fi
+  if ! jq -e '[.problem.score,.goal.score,.preserve.score,.nongoal.score]
+              | all(type=="number" and .>=1 and .<=5)' "$res" >/dev/null 2>&1; then
+    echo "── 채점 형식 불일치 (raw: $raw) ──" >&2
+    echo "SNAPSHOT_UNAVAILABLE"; return 0
+  fi
+  # floor·streak 판정 (판정은 코드). streak = 연속 '라운드' — 같은 라운드 재채점은 가산 없음.
+  local pass streak last_round
+  pass="$(jq -r --argjson f "$SCORE_FLOOR" \
+    '[.problem.score,.goal.score,.preserve.score,.nongoal.score] | min >= $f' "$res")"
+  streak="$(jq -r '.clarify.streak // 0' "$sj")"
+  last_round="$(jq -r '.clarify.last_score.round // 0' "$sj")"
+  if [ "$pass" != "true" ]; then streak=0
+  elif [ "$rounds" -gt "$last_round" ]; then streak=$((streak+1))
+  elif [ "$streak" -eq 0 ]; then streak=1
+  fi
+  jq_inplace "$sj" --argjson r "$rounds" --argjson st "$streak" --argjson fl "$pass" \
+    --arg t "$(iso_now)" \
+    --argjson sc "$(jq -c '{problem:.problem.score,goal:.goal.score,preserve:.preserve.score,nongoal:.nongoal.score}' "$res")" '
+    .clarify = ((.clarify // {}) + {streak:$st, last_score:{at:$t, round:$r, floor:$fl, scores:$sc}})'
+  # 스냅샷 뷰 — 약한 축 = 최저점 (동률이면 problem→goal→preserve→nongoal 순)
+  echo "## 채점 스냅샷 — R$rounds"
+  jq -r '[["problem",.problem],["goal",.goal],["preserve",.preserve],["nongoal",.nongoal]] as $axes
+    | ($axes | min_by(.[1].score)) as $weak
+    | ($axes | map("\(.[0])\t\(.[1].score)\t\(.[1].justification // "")") | join("\n"))
+      + "\n약한 축: \($weak[0]) (\($weak[1].score)) — \($weak[1].justification // "")"' "$res"
+  echo "floor $SCORE_FLOOR · streak $streak"
+  if [ "$pass" = "true" ] && [ "$streak" -ge 2 ]; then echo "CONVERGED"
+  elif [ "$pass" = "true" ]; then echo "FLOOR_PASS"
+  else echo "BELOW_FLOOR"; fi
+}
+
+# Acceptance Guard — ① 발견자 2 독립 병렬 → ② closer 종합 → ③ 코드 규칙.
+# 코드 규칙: closer not_ready OR (closer 종합 gaps의 high ≥ 1) → BLOCK, 그 외 PASS.
+# BLOCK이면 streak 리셋(라운드 되돌림)은 여기서 수행. 마지막 줄 토큰: PASS|BLOCK|UNAVAILABLE
+cmd_guard() {
+  [ $# -eq 1 ] || die "usage: core.sh guard <cycle_dir>"
+  need_jq
+  local dir="$1"; require_cycle_dir "$dir"
+  local sj; sj="$(state_json "$dir")"
+  require_unlocked "$sj"
+  local tf; tf="$(_transcript "$dir")"
+  [ -s "$tf" ] || fail "NO_TRANSCRIPT"
+  command -v claude >/dev/null 2>&1 || { echo "UNAVAILABLE"; return 0; }
+  mkdir -p "$dir/guard"
+  local ts; ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  # ① 발견자 2 독립 병렬 — 같은 transcript, 서로의 출력을 보지 못한다
+  local cj="$dir/guard/$ts-contrarian.json" gj="$dir/guard/$ts-gap_hunter.json"
+  local p1 p2 ok=0
+  { cat "$SCRIPT_DIR/prompts/guard-contrarian.md"; echo; echo "---"; echo; cat "$tf"; } \
+    | _lane_run "$dir/guard/$ts-contrarian.log" "$cj" &
+  p1=$!
+  { cat "$SCRIPT_DIR/prompts/guard-gap-hunter.md"; echo; echo "---"; echo; cat "$tf"; } \
+    | _lane_run "$dir/guard/$ts-gap_hunter.log" "$gj" &
+  p2=$!
+  wait "$p1" || ok=1
+  wait "$p2" || ok=1
+  if [ "$ok" -ne 0 ] \
+     || ! jq -e '.findings|type=="array"' "$cj" >/dev/null 2>&1 \
+     || ! jq -e '.findings|type=="array"' "$gj" >/dev/null 2>&1; then
+    echo "── 발견자 lane 장애 (raw: $dir/guard/$ts-*.log) ──" >&2
+    echo "UNAVAILABLE"; return 0
+  fi
+  # ② closer 종합 — [발견 결과 + transcript]
+  local oj="$dir/guard/$ts-closer.json"
+  if ! { cat "$SCRIPT_DIR/prompts/guard-closer.md"; echo; echo "## FINDER FINDINGS"; \
+         cat "$cj"; cat "$gj"; echo; echo "## TRANSCRIPT"; cat "$tf"; } \
+       | _lane_run "$dir/guard/$ts-closer.log" "$oj" \
+     || ! jq -e '.verdict=="ready" or .verdict=="not_ready"' "$oj" >/dev/null 2>&1; then
+    echo "── closer lane 장애 (raw: $dir/guard/$ts-closer.log) ──" >&2
+    echo "UNAVAILABLE"; return 0
+  fi
+  # ③ 코드 규칙 — 판정은 코드가 소유 (closer 종합본의 severity를 읽는다)
+  local verdict high token
+  verdict="$(jq -r '.verdict' "$oj")"
+  high="$(jq '[.gaps[]? | select(.severity=="high")] | length' "$oj")"
+  if [ "$verdict" != "ready" ] || [ "$high" -ge 1 ]; then token="BLOCK"; else token="PASS"; fi
+  jq_inplace "$sj" --arg t "$(iso_now)" --arg tok "$token" --argjson h "$high" '
+    .clarify = ((.clarify // {}) + {last_guard:{at:$t, token:$tok, high:$h}})
+    | if $tok == "BLOCK" then .clarify.streak = 0 else . end'
+  # 판정 뷰 — BLOCK이면 gaps를 Q-로 라우팅할 재료
+  jq -r '"## guard — closer \(.verdict) · high \([.gaps[]?|select(.severity=="high")]|length)"
+    + "\n근거: \(.reason // "-")"
+    + (if .blocking_question then "\n차단 질문: \(.blocking_question)" else "" end)
+    + (if (.gaps|length) > 0
+       then "\n" + (.gaps | map("  [\(.severity)] (\(.source // "?")) \(.finding)"
+                               + (if .question then " → \(.question)" else "" end)) | join("\n"))
+       else "\n  gap 없음" end)' "$oj"
+  echo "$token"
 }
 
 # ── step ──────────────────────────────────────────────────────────────────────
@@ -611,11 +791,14 @@ case "$cmd" in
   new)    cmd_new "$@" ;;
   status) cmd_status "$@" ;;
   log)    cmd_log "$@" ;;
+  interview-log) cmd_interview_log "$@" ;;
+  score)  cmd_score "$@" ;;
+  guard)  cmd_guard "$@" ;;
   step)   cmd_step "$@" ;;
   verify) cmd_verify "$@" ;;
   commit) cmd_commit "$@" ;;
   report) cmd_report "$@" ;;
   handoff) cmd_handoff "$@" ;;
   close)  cmd_close "$@" ;;
-  *) sed -n '2,31p' "$0" >&2; exit 2 ;;
+  *) sed -n '2,37p' "$0" >&2; exit 2 ;;
 esac

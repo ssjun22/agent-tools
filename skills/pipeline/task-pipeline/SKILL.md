@@ -18,7 +18,7 @@ disable-model-invocation: true
 ## 라우팅
 | 단계 | 실행 | 커맨드 / 산출 |
 |---|---|---|
-| 수렴 clarify⇄explore | 메인(clarify 라이브) · @explorer(스캔 보조) | `brief.md` |
+| 수렴 clarify⇄explore | 메인(clarify 라이브) · @explorer(스캔 보조) | `core.sh interview-log <dir> …`(transcript) · `score <dir>` · `guard <dir>` → 종료 시 `brief.md` 1회 생성 |
 | 기준 설계 + plan | @planner | `plan.md`(`json steps`) |
 | ① 착수 게이트 | 메인 + 사용자 | `core.sh step lock <dir> --verify … --max … [--check …]` (동결 + 브랜치 생성) |
 | 루프 (걸음별) | @generator ×1/걸음 | `core.sh verify <dir> --step S-n` · `core.sh commit <dir> S-n` |
@@ -41,4 +41,4 @@ disable-model-invocation: true
 - **요약 인계** — 컨텍스트는 항상 경로로 넘긴다.
 
 ## 참조
-`references/`: `stages.md`(단계 절차·crew·병렬) · `clarify-method.md` · `plan-rules.md` · `state-files.md`(데이터 규약) · `gate-views.md`(사람 접점 발화 규격) · `terms.md`(용어). 템플릿: `templates/{brief,plan}.md`.
+`references/`: `stages.md`(단계 절차·crew·병렬) · `clarify-method.md` · `plan-rules.md` · `state-files.md`(데이터 규약) · `gate-views.md`(사람 접점 발화 규격) · `terms.md`(용어). 템플릿: `templates/{brief,plan}.md`. 채점·guard 프롬프트: `scripts/prompts/`(rubric·guard 3종 — core.sh 전용, 메인이 읽지 않는다).
